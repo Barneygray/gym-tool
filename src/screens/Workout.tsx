@@ -10,7 +10,7 @@ import { saveSession } from '../db/db'
 import { pushSession } from '../db/sync'
 import { Stepper, formatNum } from '../components/Stepper'
 import { RestTimer } from '../components/RestTimer'
-import { BackIcon } from '../components/Icons'
+import { BackIcon, TrashIcon } from '../components/Icons'
 import type { ActiveWorkout } from '../App'
 
 const KIND_LABEL = {
@@ -38,10 +38,11 @@ export function WorkoutScreen({ active, setActive, history, settings, onFinished
   const [rpe, setRpe] = useState<number | undefined>(undefined)
   const [note, setNote] = useState('')
   const [showNote, setShowNote] = useState(false)
+  const [editingIndex, setEditingIndex] = useState<number | null>(null)
 
-  // Seed the steppers whenever the exercise changes: continue from the last
-  // logged set of this workout, otherwise from the engine's suggestion.
-  useEffect(() => {
+  // Reset the input to continue from the last logged set of this workout,
+  // otherwise from the engine's suggestion.
+  const seedInputs = () => {
     const prior = active.logged[exercise.id]
     if (prior && prior.length > 0) {
       setWeight(prior[prior.length - 1].weight)
@@ -53,6 +54,12 @@ export function WorkoutScreen({ active, setActive, history, settings, onFinished
     setRpe(undefined)
     setNote('')
     setShowNote(false)
+    setEditingIndex(null)
+  }
+
+  // Re-seed whenever the exercise changes.
+  useEffect(() => {
+    seedInputs()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [exercise.id])
 
@@ -65,16 +72,47 @@ export function WorkoutScreen({ active, setActive, history, settings, onFinished
     ? platesPerSide(weight, settings.barWeightKg, settings.platesKg)
     : null
 
-  const logSet = () => {
+  const writeSets = (sets: SetLog[]) => setActive({ ...active, logged: { ...active.logged, [exercise.id]: sets } })
+
+  const commitSet = () => {
     const set: SetLog = { weight, reps }
     if (rpe !== undefined) set.rpe = rpe
     if (note.trim()) set.note = note.trim()
-    const logged = { ...active.logged, [exercise.id]: [...loggedSets, set] }
-    setActive({ ...active, logged })
+
+    if (editingIndex !== null) {
+      const next = loggedSets.map((s, i) => (i === editingIndex ? set : s))
+      writeSets(next)
+      setEditingIndex(null)
+      const last = next[next.length - 1]
+      setWeight(last.weight)
+      setReps(last.reps)
+      setRpe(undefined)
+      setNote('')
+      setShowNote(false)
+      return
+    }
+
+    writeSets([...loggedSets, set])
     setRpe(undefined)
     setNote('')
     setShowNote(false)
     setRest({ startedAt: Date.now(), durationSec: exercise.restSec })
+  }
+
+  const editSet = (i: number) => {
+    const s = loggedSets[i]
+    setEditingIndex(i)
+    setWeight(s.weight)
+    setReps(s.reps)
+    setRpe(s.rpe)
+    setNote(s.note ?? '')
+    setShowNote(!!s.note)
+    setRest(null)
+  }
+
+  const deleteSet = (i: number) => {
+    writeSets(loggedSets.filter((_, idx) => idx !== i))
+    seedInputs()
   }
 
   const go = (delta: number) => {
@@ -187,23 +225,33 @@ export function WorkoutScreen({ active, setActive, history, settings, onFinished
         </button>
       )}
 
-      <button className="btn-primary" onClick={logSet} disabled={reps <= 0}
+      <button className="btn-primary" onClick={commitSet} disabled={reps <= 0}
         style={{ opacity: reps <= 0 ? 0.4 : 1, marginTop: 6 }}>
-        Log set {loggedSets.length + 1}
+        {editingIndex !== null ? `Update set ${editingIndex + 1}` : `Log set ${loggedSets.length + 1}`}
       </button>
+      {editingIndex !== null && (
+        <button className="btn-ghost" style={{ marginTop: 8 }} onClick={seedInputs}>
+          Cancel edit
+        </button>
+      )}
 
       {loggedSets.length > 0 && (
         <div className="set-log">
-          <div className="section-label" style={{ marginTop: 18 }}>Logged</div>
+          <div className="section-label" style={{ marginTop: 18 }}>Logged — tap to edit</div>
           {loggedSets.map((s, i) => (
-            <div className="set-row" key={i}>
-              <span className="idx num">S{i + 1}</span>
-              <span className={`load num${s.reps >= suggestion.targetReps ? ' hit' : ''}`}>
-                {formatNum(s.weight)} kg × {s.reps}
-              </span>
-              <span className="rpe-note">
-                {s.rpe !== undefined && `RPE ${s.rpe}`}{s.rpe !== undefined && s.note ? ' · ' : ''}{s.note}
-              </span>
+            <div className={`set-row${editingIndex === i ? ' editing' : ''}`} key={i}>
+              <button className="set-tap" onClick={() => editSet(i)}>
+                <span className="idx num">S{i + 1}</span>
+                <span className={`load num${s.reps >= suggestion.targetReps ? ' hit' : ''}`}>
+                  {formatNum(s.weight)} kg × {s.reps}
+                </span>
+                <span className="rpe-note">
+                  {s.rpe !== undefined && `RPE ${s.rpe}`}{s.rpe !== undefined && s.note ? ' · ' : ''}{s.note}
+                </span>
+              </button>
+              <button className="set-del" aria-label={`Delete set ${i + 1}`} onClick={() => deleteSet(i)}>
+                <TrashIcon size={16} />
+              </button>
             </div>
           ))}
         </div>

@@ -4,6 +4,7 @@ import { DAYS, dayById } from '../data/days'
 import { getExercise } from '../data/exercises'
 import { generateWorkout, swapOptions } from '../engine/rotation'
 import { suggestFor } from '../engine/progression'
+import { recommendDay } from '../engine/coach'
 import { lastSessionOf } from '../engine/history'
 import { recoveryByMuscle, daysSince } from '../engine/stats'
 import { ChevronIcon, SwapIcon } from '../components/Icons'
@@ -25,11 +26,23 @@ export function TodayScreen({ history, settings, startWorkout }: TodayProps) {
   const [previewDay, setPreviewDay] = useState<DayType | null>(null)
   const now = Date.now()
   const recovery = useMemo(() => recoveryByMuscle(history, now), [history, now])
+  const rec = useMemo(() => recommendDay(history, now), [history, now])
 
   return (
     <>
       <h1 className="screen-title">Train</h1>
       <p className="screen-sub">Pick today’s session — Forge remembers where you left off.</p>
+
+      <button className="coach-card" onClick={() => setPreviewDay(rec.dayType)}>
+        <div className="coach-kind">Train next</div>
+        <div className="coach-day">{rec.dayName}</div>
+        <div className="coach-why">{rec.reason}</div>
+        {rec.overdue.length > 0 && (
+          <div className="coach-overdue">
+            Overdue: {rec.overdue.slice(0, 4).map((m) => MUSCLE_LABEL[m]).join(' · ')}
+          </div>
+        )}
+      </button>
 
       <div className="section-label">Muscle freshness</div>
       <div className="recovery">

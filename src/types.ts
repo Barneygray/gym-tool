@@ -61,6 +61,10 @@ export interface Session {
   startedAt: number
   finishedAt?: number
   entries: SessionEntry[]
+  /** Last local write (create or edit), ms epoch. Drives sync conflict resolution. */
+  updatedAt?: number
+  /** Soft-delete tombstone, ms epoch. Set = deleted; kept so deletions propagate via sync. */
+  deletedAt?: number
 }
 
 export interface Settings {

@@ -17,8 +17,13 @@ tells you exactly what to lift next.
   auto-starting rest timer with chime/vibration, per-set RPE and notes.
 - **Stall detection** — three sessions without progress on a lift triggers a
   deload-and-rebuild suggestion (or swap to a sibling variation).
-- **Muscle freshness** — the home screen shows days-since-trained per muscle so
-  you can pick today's session intelligently.
+- **Muscle freshness + a coach** — the home screen shows days-since-trained per
+  muscle *and* recommends what to train next, picking the day whose muscles are
+  most rested and flagging anything gone overdue.
+- **Editable log** — a Log tab browses every session you've finished; open one to
+  fix a mistyped set, delete a set, or remove the whole session. In-workout, any
+  logged set can be tapped to edit or swiped away — so a fat-fingered entry never
+  permanently skews your PRs, e1RM trends, or next suggestion.
 - **Progress** — estimated 1RM trends (Epley), weekly tonnage per muscle group,
   consistency, and PR tracking with in-session PR celebrations.
 - **Stretch tab** — key holds per muscle group, plus a *Desk Rescue* section for
@@ -30,7 +35,9 @@ tells you exactly what to lift next.
 - **Zero-setup cloud backup** — sessions also sync to a Supabase table
   automatically, with no sign-in. Every device that opens the app shares one
   data bucket, so a lost or replaced phone gets its full history back the moment
-  it opens the app. See "Cloud backup" below.
+  it opens the app. Sync reconciles by write time, so edits and deletions
+  propagate too (not just new sessions), and any backup failure is surfaced in
+  Settings instead of failing silently. See "Cloud backup" below.
 
 ## Stack
 

@@ -68,3 +68,22 @@ export const BackIcon = ({ size = 22 }: IconProps) => (
     <path d="M15 6l-6 6 6 6" />
   </svg>
 )
+
+export const HistoryIcon = ({ size = 22 }: IconProps) => (
+  <svg {...base(size)}>
+    <path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1M3.5 4.5V9h4.5" />
+    <path d="M12 8v4l3 2" />
+  </svg>
+)
+
+export const TrashIcon = ({ size = 18 }: IconProps) => (
+  <svg {...base(size)}>
+    <path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-12" />
+  </svg>
+)
+
+export const CloseIcon = ({ size = 18 }: IconProps) => (
+  <svg {...base(size)}>
+    <path d="M6 6l12 12M18 6 6 18" />
+  </svg>
+)
