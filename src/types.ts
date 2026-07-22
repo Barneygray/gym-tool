@@ -12,6 +12,9 @@ export type Muscle =
 
 export type DayType = 'push' | 'pull' | 'legs' | 'shoulders-arms' | 'chest-back'
 
+/** Sessions cover gym days plus logged conditioning work. */
+export type SessionKind = DayType | 'conditioning'
+
 export type Equipment =
   | 'barbell'
   | 'dumbbell'
@@ -52,7 +55,7 @@ export interface SessionEntry {
 
 export interface Session {
   id?: number
-  dayType: DayType
+  dayType: SessionKind
   startedAt: number
   finishedAt?: number
   entries: SessionEntry[]
