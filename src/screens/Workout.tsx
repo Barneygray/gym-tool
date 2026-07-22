@@ -7,6 +7,7 @@ import { warmupRamp } from '../engine/warmup'
 import { platesPerSide } from '../engine/plates'
 import { newPRsInSession } from '../engine/stats'
 import { saveSession } from '../db/db'
+import { pushSession } from '../db/sync'
 import { Stepper, formatNum } from '../components/Stepper'
 import { RestTimer } from '../components/RestTimer'
 import { BackIcon } from '../components/Icons'
@@ -93,12 +94,14 @@ export function WorkoutScreen({ active, setActive, history, settings, onFinished
       return
     }
     const session: Session = {
+      uuid: crypto.randomUUID(),
       dayType: active.dayType,
       startedAt: active.startedAt,
       finishedAt: Date.now(),
       entries,
     }
     await saveSession(session)
+    void pushSession(session)
     const prs = newPRsInSession(session, [session, ...history])
     await onFinished()
     setRest(null)

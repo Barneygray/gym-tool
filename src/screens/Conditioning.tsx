@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import type { Session } from '../types'
 import { CONDITIONING } from '../data/conditioning'
 import { saveSession } from '../db/db'
+import { pushSession } from '../db/sync'
 import { daysSince } from '../engine/stats'
 
 const PURPOSE_LABEL = { power: 'Power', core: 'Core', spine: 'Spine' } as const
@@ -43,12 +44,15 @@ export function ConditioningScreen({ history, onLogged }: ConditioningProps) {
 
   const logSelected = async () => {
     const t = Date.now()
-    await saveSession({
+    const session: Session = {
+      uuid: crypto.randomUUID(),
       dayType: 'conditioning',
       startedAt: t,
       finishedAt: t,
       entries: [...selected].map((id) => ({ exerciseId: id, sets: [{ weight: 0, reps: 1 }] })),
-    })
+    }
+    await saveSession(session)
+    void pushSession(session)
     setSelected(new Set())
     await onLogged()
   }

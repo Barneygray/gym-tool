@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { DayType, Session, SetLog, Settings } from './types'
 import { DEFAULT_SETTINGS, getHistory, getSettings } from './db/db'
+import { onAuthChange, runSync } from './db/sync'
 import { BarbellIcon, ChartIcon, GearIcon, KettlebellIcon, StretchIcon } from './components/Icons'
 import { TodayScreen } from './screens/Today'
 import { WorkoutScreen } from './screens/Workout'
@@ -36,16 +37,32 @@ export default function App() {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS)
   const [active, setActiveState] = useState<ActiveWorkout | null>(loadActive)
   const [ready, setReady] = useState(false)
+  const [syncEmail, setSyncEmail] = useState<string | null>(null)
+  const [syncing, setSyncing] = useState(false)
+  const refreshRef = useRef<() => Promise<void>>(async () => {})
 
   const refresh = useCallback(async () => {
     const [h, s] = await Promise.all([getHistory(), getSettings()])
     setHistory(h)
     setSettings(s)
   }, [])
+  refreshRef.current = refresh
 
   useEffect(() => {
     refresh().then(() => setReady(true))
   }, [refresh])
+
+  useEffect(() => {
+    return onAuthChange((email) => {
+      setSyncEmail(email)
+      if (email) {
+        setSyncing(true)
+        runSync()
+          .then(() => refreshRef.current())
+          .finally(() => setSyncing(false))
+      }
+    })
+  }, [])
 
   const setActive = useCallback((w: ActiveWorkout | null) => {
     setActiveState(w)
@@ -77,7 +94,12 @@ export default function App() {
             {tab === 'condition' && <ConditioningScreen history={history} onLogged={refresh} />}
             {tab === 'progress' && <ProgressScreen history={history} />}
             {tab === 'settings' && (
-              <SettingsScreen settings={settings} onChanged={refresh} />
+              <SettingsScreen
+                settings={settings}
+                onChanged={refresh}
+                syncEmail={syncEmail}
+                syncing={syncing}
+              />
             )}
           </>
         )}

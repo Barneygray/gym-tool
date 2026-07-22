@@ -55,6 +55,8 @@ export interface SessionEntry {
 
 export interface Session {
   id?: number
+  /** Stable cross-device identity, used as the cloud-sync key. */
+  uuid: string
   dayType: SessionKind
   startedAt: number
   finishedAt?: number

@@ -9,6 +9,7 @@ import { generateWorkout, swapOptions } from './rotation'
 import { platesPerSide, roundToLoadable } from './plates'
 import { warmupRamp } from './warmup'
 import { e1rm, newPRsInSession, recoveryByMuscle, volumeByMuscle } from './stats'
+import { planSessionSync } from './syncPlan'
 
 const DAY = 86_400_000
 const NOW = Date.UTC(2026, 6, 22)
@@ -16,7 +17,7 @@ const NOW = Date.UTC(2026, 6, 22)
 let nextStart = NOW - 90 * DAY
 function session(dayType: Session['dayType'], exerciseId: string, sets: SetLog[], startedAt?: number): Session {
   const t = startedAt ?? (nextStart += DAY)
-  return { dayType, startedAt: t, finishedAt: t + 3_600_000, entries: [{ exerciseId, sets }] }
+  return { uuid: crypto.randomUUID(), dayType, startedAt: t, finishedAt: t + 3_600_000, entries: [{ exerciseId, sets }] }
 }
 
 const bench = getExercise('bench-press') // range 5–8, +2.5 kg
@@ -178,5 +179,28 @@ describe('stats', () => {
     const vol = volumeByMuscle(h, NOW - 7 * DAY, NOW)
     expect(vol.get('chest')).toBe(1000)
     expect(vol.get('triceps')).toBe(500)
+  })
+})
+
+describe('cloud sync planning', () => {
+  const a = session('push', 'bench-press', [{ weight: 80, reps: 6 }])
+  const b = session('pull', 'barbell-row', [{ weight: 60, reps: 8 }])
+
+  it('pushes local sessions the cloud does not have yet', () => {
+    const { toPush, toPullUuids } = planSessionSync([a, b], [a.uuid])
+    expect(toPush).toEqual([b])
+    expect(toPullUuids).toEqual([])
+  })
+
+  it('pulls cloud sessions missing locally', () => {
+    const { toPush, toPullUuids } = planSessionSync([a], [a.uuid, b.uuid])
+    expect(toPush).toEqual([])
+    expect(toPullUuids).toEqual([b.uuid])
+  })
+
+  it('is a no-op once both sides match', () => {
+    const { toPush, toPullUuids } = planSessionSync([a, b], [a.uuid, b.uuid])
+    expect(toPush).toEqual([])
+    expect(toPullUuids).toEqual([])
   })
 })

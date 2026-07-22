@@ -1,20 +1,35 @@
 import { useRef, useState } from 'react'
 import type { Settings } from '../types'
 import { exportData, importData, saveSettings, wipeAll } from '../db/db'
+import { pushSettings, signInWithEmail, signOut, supabaseConfigured } from '../db/sync'
 
 interface SettingsProps {
   settings: Settings
   onChanged: () => Promise<void>
+  syncEmail: string | null
+  syncing: boolean
 }
 
-export function SettingsScreen({ settings, onChanged }: SettingsProps) {
+export function SettingsScreen({ settings, onChanged, syncEmail, syncing }: SettingsProps) {
   const [platesText, setPlatesText] = useState(settings.platesKg.join(', '))
   const [status, setStatus] = useState<string | null>(null)
+  const [email, setEmail] = useState('')
+  const [linkSent, setLinkSent] = useState(false)
+  const [authError, setAuthError] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
   const update = async (patch: Partial<Settings>) => {
-    await saveSettings({ ...settings, ...patch })
+    const next = { ...settings, ...patch }
+    await saveSettings(next)
+    void pushSettings(next)
     await onChanged()
+  }
+
+  const sendLink = async () => {
+    setAuthError(null)
+    const error = await signInWithEmail(email.trim())
+    if (error) setAuthError(error)
+    else setLinkSent(true)
   }
 
   const savePlates = async () => {
@@ -103,6 +118,45 @@ export function SettingsScreen({ settings, onChanged }: SettingsProps) {
           />
         </div>
       </div>
+
+      {supabaseConfigured && (
+        <>
+          <div className="section-label">Cloud Backup</div>
+          <div className="card">
+            {syncEmail ? (
+              <div className="settings-row">
+                <div>
+                  <div className="k">{syncing ? 'Syncing…' : 'Backed up ✓'}</div>
+                  <div className="sub">Signed in as {syncEmail} — restores automatically on any device</div>
+                </div>
+                <button className="btn-small" onClick={() => signOut()}>Sign out</button>
+              </div>
+            ) : linkSent ? (
+              <div className="settings-row">
+                <div>
+                  <div className="k">Check your email</div>
+                  <div className="sub">Tap the link we sent to {email} on this device to finish signing in</div>
+                </div>
+              </div>
+            ) : (
+              <div className="settings-row" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+                <div>
+                  <div className="k">Back up to the cloud</div>
+                  <div className="sub">Sign in with just your email — no password. Every session you log gets saved automatically, so losing or replacing your phone won't lose your history.</div>
+                </div>
+                <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                  <input style={{ flex: 1 }} type="email" placeholder="you@email.com" value={email}
+                    onChange={(e) => setEmail(e.target.value)} />
+                  <button className="btn-small accent" onClick={sendLink} disabled={!email.includes('@')}>
+                    Send link
+                  </button>
+                </div>
+                {authError && <div className="sub" style={{ color: '#ff5d5d', marginTop: 8 }}>{authError}</div>}
+              </div>
+            )}
+          </div>
+        </>
+      )}
 
       <div className="section-label">Data</div>
       <div className="card">
