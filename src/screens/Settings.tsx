@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import type { Settings } from '../types'
 import { exportData, importData, saveSettings, wipeAll } from '../db/db'
-import { pushSettings, signInWithEmail, signOut, supabaseConfigured } from '../db/sync'
+import { pushSettings, signInWithEmail, signOut, supabaseConfigured, verifyEmailCode } from '../db/sync'
 
 interface SettingsProps {
   settings: Settings
@@ -14,7 +14,9 @@ export function SettingsScreen({ settings, onChanged, syncEmail, syncing }: Sett
   const [platesText, setPlatesText] = useState(settings.platesKg.join(', '))
   const [status, setStatus] = useState<string | null>(null)
   const [email, setEmail] = useState('')
-  const [linkSent, setLinkSent] = useState(false)
+  const [codeSent, setCodeSent] = useState(false)
+  const [code, setCode] = useState('')
+  const [verifying, setVerifying] = useState(false)
   const [authError, setAuthError] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
@@ -25,11 +27,20 @@ export function SettingsScreen({ settings, onChanged, syncEmail, syncing }: Sett
     await onChanged()
   }
 
-  const sendLink = async () => {
+  const sendCode = async () => {
     setAuthError(null)
     const error = await signInWithEmail(email.trim())
     if (error) setAuthError(error)
-    else setLinkSent(true)
+    else setCodeSent(true)
+  }
+
+  const verifyCode = async () => {
+    setAuthError(null)
+    setVerifying(true)
+    const error = await verifyEmailCode(email.trim(), code)
+    setVerifying(false)
+    if (error) setAuthError(error)
+    // On success, onAuthChange in App fires and swaps this card to "Backed up".
   }
 
   const savePlates = async () => {
@@ -131,12 +142,26 @@ export function SettingsScreen({ settings, onChanged, syncEmail, syncing }: Sett
                 </div>
                 <button className="btn-small" onClick={() => signOut()}>Sign out</button>
               </div>
-            ) : linkSent ? (
-              <div className="settings-row">
+            ) : codeSent ? (
+              <div className="settings-row" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
                 <div>
-                  <div className="k">Check your email</div>
-                  <div className="sub">Tap the link we sent to {email} on this device to finish signing in</div>
+                  <div className="k">Enter your code</div>
+                  <div className="sub">We emailed a 6-digit code to {email}. Type it here to finish — no need to leave the app.</div>
                 </div>
+                <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                  <input style={{ flex: 1, letterSpacing: '0.25em', textAlign: 'center' }}
+                    type="text" inputMode="numeric" autoComplete="one-time-code" maxLength={6}
+                    placeholder="123456" value={code}
+                    onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))} />
+                  <button className="btn-small accent" onClick={verifyCode} disabled={code.length < 6 || verifying}>
+                    {verifying ? '…' : 'Verify'}
+                  </button>
+                </div>
+                <button className="btn-small" style={{ marginTop: 8, alignSelf: 'flex-start' }}
+                  onClick={() => { setCodeSent(false); setCode(''); setAuthError(null) }}>
+                  Use a different email
+                </button>
+                {authError && <div className="sub" style={{ color: '#ff5d5d', marginTop: 8 }}>{authError}</div>}
               </div>
             ) : (
               <div className="settings-row" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
@@ -145,10 +170,11 @@ export function SettingsScreen({ settings, onChanged, syncEmail, syncing }: Sett
                   <div className="sub">Sign in with just your email — no password. Every session you log gets saved automatically, so losing or replacing your phone won't lose your history.</div>
                 </div>
                 <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-                  <input style={{ flex: 1 }} type="email" placeholder="you@email.com" value={email}
+                  <input style={{ flex: 1 }} type="email" inputMode="email" autoComplete="email"
+                    placeholder="you@email.com" value={email}
                     onChange={(e) => setEmail(e.target.value)} />
-                  <button className="btn-small accent" onClick={sendLink} disabled={!email.includes('@')}>
-                    Send link
+                  <button className="btn-small accent" onClick={sendCode} disabled={!email.includes('@')}>
+                    Send code
                   </button>
                 </div>
                 {authError && <div className="sub" style={{ color: '#ff5d5d', marginTop: 8 }}>{authError}</div>}

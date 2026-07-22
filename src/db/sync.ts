@@ -32,12 +32,24 @@ export function onAuthChange(cb: (email: string | null) => void): () => void {
   return () => sub.subscription.unsubscribe()
 }
 
+/** Send the login email. Supabase delivers both a magic link and a 6-digit code. */
 export async function signInWithEmail(email: string): Promise<string | null> {
   if (!supabase) return 'Cloud backup is not configured yet.'
   const { error } = await supabase.auth.signInWithOtp({
     email,
     options: { emailRedirectTo: window.location.href },
   })
+  return error?.message ?? null
+}
+
+/**
+ * Verify the 6-digit code from the email. This is the reliable path for an
+ * installed PWA on iOS, where a tapped magic link opens Safari (a separate
+ * storage context) and never reaches the home-screen app.
+ */
+export async function verifyEmailCode(email: string, code: string): Promise<string | null> {
+  if (!supabase) return 'Cloud backup is not configured yet.'
+  const { error } = await supabase.auth.verifyOtp({ email, token: code.trim(), type: 'email' })
   return error?.message ?? null
 }
 
