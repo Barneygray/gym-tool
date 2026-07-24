@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { Session, SetLog, Settings } from '../types'
-import { getExercise } from '../data/exercises'
+import type { BodyLog, Session, SetLog, Settings } from '../types'
+import { getExercise, isBodyweightLoaded } from '../data/exercises'
 import { dayById } from '../data/days'
 import { suggestFor } from '../engine/progression'
 import { warmupRamp } from '../engine/warmup'
 import { platesPerSide } from '../engine/plates'
 import { newPRsInSession } from '../engine/stats'
+import { bodyweightAt, latestBodyweight } from '../engine/bodyweight'
 import { saveSession } from '../db/db'
 import { pushSession } from '../db/sync'
+import { useWakeLock } from '../hooks/useWakeLock'
 import { Stepper, formatNum } from '../components/Stepper'
 import { RestTimer } from '../components/RestTimer'
 import { BackIcon, TrashIcon } from '../components/Icons'
@@ -22,12 +24,19 @@ interface WorkoutProps {
   setActive: (w: ActiveWorkout | null) => void
   history: Session[]
   settings: Settings
+  bodyLog: BodyLog[]
   onFinished: () => Promise<void>
 }
 
-export function WorkoutScreen({ active, setActive, history, settings, onFinished }: WorkoutProps) {
+export function WorkoutScreen({ active, setActive, history, settings, bodyLog, onFinished }: WorkoutProps) {
   const [summary, setSummary] = useState<{ session: Session; prs: ReturnType<typeof newPRsInSession> } | null>(null)
   const [rest, setRest] = useState<{ startedAt: number; durationSec: number } | null>(null)
+
+  // Keep the screen awake while training so the rest timer survives idle time.
+  useWakeLock(summary === null)
+
+  const bwAt = useMemo(() => bodyweightAt(bodyLog), [bodyLog])
+  const bodyweight = useMemo(() => latestBodyweight(bodyLog), [bodyLog])
 
   const exercise = getExercise(active.exerciseIds[active.currentIndex])
   const suggestion = useMemo(() => suggestFor(exercise, history, settings), [exercise, history, settings])
@@ -140,7 +149,7 @@ export function WorkoutScreen({ active, setActive, history, settings, onFinished
     }
     await saveSession(session)
     void pushSession(session)
-    const prs = newPRsInSession(session, [session, ...history])
+    const prs = newPRsInSession(session, [session, ...history], bwAt)
     await onFinished()
     setRest(null)
     setSummary({ session, prs })
@@ -200,6 +209,12 @@ export function WorkoutScreen({ active, setActive, history, settings, onFinished
 
       {plates && plates.length > 0 && (
         <div className="plates-hint num">Per side: {plates.map(formatNum).join(' · ')}</div>
+      )}
+
+      {isBodyweightLoaded(exercise) && bodyweight !== null && (
+        <div className="plates-hint num">
+          + bodyweight {formatNum(bodyweight)} kg = {formatNum(bodyweight + weight)} kg total
+        </div>
       )}
 
       <div className="rpe-picker">

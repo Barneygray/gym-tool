@@ -67,6 +67,12 @@ export interface Session {
   deletedAt?: number
 }
 
+/** One bodyweight reading, keyed by start-of-day epoch (one entry per day). */
+export interface BodyLog {
+  at: number
+  kg: number
+}
+
 export interface Settings {
   id: string
   barWeightKg: number

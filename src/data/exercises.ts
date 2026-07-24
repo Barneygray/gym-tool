@@ -27,7 +27,7 @@ const ex = (
   cue,
 })
 
-export const EXERCISES: Exercise[] = [
+export const BUILTIN_EXERCISES: Exercise[] = [
   // ── Chest ─────────────────────────────────────────────
   ex('bench-press', 'Barbell Bench Press', 'chest', ['triceps', 'shoulders'], 'barbell', 'horizontal-press', [5, 8], 2.5, 180, true,
     'Shoulder blades pinned, feet planted, bar to mid-chest, drive up and slightly back.'),
@@ -141,10 +141,67 @@ export const EXERCISES: Exercise[] = [
     'No swing: tilt the pelvis and curl the legs up, lower dead slow.'),
 ]
 
-export const exerciseById = new Map(EXERCISES.map((e) => [e.id, e]))
+/** Ids of the curated built-in catalog, so custom lifts can be told apart. */
+export const BUILTIN_IDS = new Set(BUILTIN_EXERCISES.map((e) => e.id))
+
+/**
+ * The live catalog = built-ins plus any user-defined exercises. These are
+ * reassigned (not mutated) by `registerCustomExercises`; ES module live
+ * bindings mean every importer sees the updated array/map after registration.
+ */
+export let EXERCISES: Exercise[] = [...BUILTIN_EXERCISES]
+export let exerciseById = new Map(EXERCISES.map((e) => [e.id, e]))
+
+/** Merge the user's custom exercises into the live catalog (call once on load). */
+export function registerCustomExercises(custom: Exercise[]): void {
+  const cleaned = custom.filter((e) => !BUILTIN_IDS.has(e.id))
+  EXERCISES = [...BUILTIN_EXERCISES, ...cleaned]
+  exerciseById = new Map(EXERCISES.map((e) => [e.id, e]))
+}
+
+export function isCustomExercise(id: string): boolean {
+  return !BUILTIN_IDS.has(id)
+}
+
+/**
+ * Bodyweight-loaded lifts carry the trainee's own weight, so a logged "weight"
+ * is *added* load — real load is bodyweight + added (see engine/bodyweight).
+ */
+export function isBodyweightLoaded(exercise: Exercise): boolean {
+  return exercise.equipment === 'bodyweight'
+}
 
 export function getExercise(id: string): Exercise {
   const found = exerciseById.get(id)
   if (!found) throw new Error(`Unknown exercise: ${id}`)
   return found
+}
+
+/** Build a custom Exercise from a partial form, filling sensible defaults. */
+export function makeCustomExercise(input: {
+  id?: string
+  name: string
+  primary: Exercise['primary']
+  secondary?: Exercise['secondary']
+  equipment: Exercise['equipment']
+  repRange?: [number, number]
+  increment?: number
+  restSec?: number
+  isCompound?: boolean
+  cue?: string
+}): Exercise {
+  return {
+    id: input.id ?? `custom-${crypto.randomUUID()}`,
+    name: input.name.trim(),
+    primary: input.primary,
+    secondary: input.secondary ?? [],
+    equipment: input.equipment,
+    variationGroup: input.id ?? `custom-${input.name.trim().toLowerCase().replace(/\s+/g, '-')}`,
+    repRange: input.repRange ?? [8, 12],
+    increment: input.increment ?? (input.equipment === 'barbell' ? 2.5 : 2),
+    restSec: input.restSec ?? (input.isCompound ? 150 : 90),
+    isCompound: input.isCompound ?? false,
+    barLoaded: input.equipment === 'barbell',
+    cue: input.cue?.trim() ?? '',
+  }
 }

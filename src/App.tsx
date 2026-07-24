@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { DayType, Session, SetLog, Settings } from './types'
-import { DEFAULT_SETTINGS, getHistory, getSettings } from './db/db'
+import type { BodyLog, DayType, Session, SetLog, Settings } from './types'
+import { DEFAULT_SETTINGS, getBodyLog, getHistory, getSettings, loadCustomExercises } from './db/db'
 import { onSyncError, runSync, supabaseConfigured } from './db/sync'
 import { BarbellIcon, ChartIcon, GearIcon, HistoryIcon, KettlebellIcon, StretchIcon } from './components/Icons'
 import { TodayScreen } from './screens/Today'
@@ -36,6 +36,7 @@ export default function App() {
   const [tab, setTab] = useState<Tab>('today')
   const [history, setHistory] = useState<Session[]>([])
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS)
+  const [bodyLog, setBodyLog] = useState<BodyLog[]>([])
   const [active, setActiveState] = useState<ActiveWorkout | null>(loadActive)
   const [ready, setReady] = useState(false)
   const [syncing, setSyncing] = useState(false)
@@ -43,9 +44,13 @@ export default function App() {
   const refreshRef = useRef<() => Promise<void>>(async () => {})
 
   const refresh = useCallback(async () => {
-    const [h, s] = await Promise.all([getHistory(), getSettings()])
+    // Register custom exercises before setting state, so any render that looks
+    // up an exercise by id (e.g. a resumed workout) can find custom lifts.
+    await loadCustomExercises()
+    const [h, s, bl] = await Promise.all([getHistory(), getSettings(), getBodyLog()])
     setHistory(h)
     setSettings(s)
+    setBodyLog(bl)
   }, [])
   refreshRef.current = refresh
 
@@ -87,6 +92,7 @@ export default function App() {
             setActive={setActive}
             history={history}
             settings={settings}
+            bodyLog={bodyLog}
             onFinished={refresh}
           />
         ) : (
@@ -97,7 +103,9 @@ export default function App() {
             {tab === 'log' && <LogScreen history={history} onChanged={refresh} />}
             {tab === 'stretch' && <StretchScreen />}
             {tab === 'condition' && <ConditioningScreen history={history} onLogged={refresh} />}
-            {tab === 'progress' && <ProgressScreen history={history} />}
+            {tab === 'progress' && (
+              <ProgressScreen history={history} bodyLog={bodyLog} onChanged={refresh} />
+            )}
             {tab === 'settings' && (
               <SettingsScreen
                 settings={settings}

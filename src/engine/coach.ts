@@ -1,6 +1,7 @@
 import type { DayType, Muscle, Session } from '../types'
 import { DAYS } from '../data/days'
 import { recoveryByMuscle } from './stats'
+import { underVolumeMuscles } from './volume'
 
 export interface DayRecommendation {
   dayType: DayType
@@ -9,6 +10,8 @@ export interface DayRecommendation {
   reason: string
   /** Muscles gone stale (≥ 7 days, or never trained once you have history). */
   overdue: Muscle[]
+  /** Muscles trained this week but below their minimum effective volume. */
+  underVolume: Muscle[]
 }
 
 const MUSCLE_LABEL: Record<Muscle, string> = {
@@ -61,6 +64,7 @@ export function recommendDay(history: Session[], now: number): DayRecommendation
     headline: fresh ? 'Start here' : `${best.name} is your freshest option`,
     reason,
     overdue,
+    underVolume: fresh ? [] : underVolumeMuscles(history, now),
   }
 }
 

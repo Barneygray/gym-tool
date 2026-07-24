@@ -1,9 +1,14 @@
 import Dexie, { type Table } from 'dexie'
-import type { Session, Settings } from '../types'
+import type { BodyLog, Exercise, Session, Settings } from '../types'
+import { registerCustomExercises } from '../data/exercises'
 
 export class ForgeDB extends Dexie {
   sessions!: Table<Session, number>
   settings!: Table<Settings, string>
+  /** User-defined exercises, merged with the built-in catalog at load time. */
+  exercises!: Table<Exercise, string>
+  /** Bodyweight readings, one row per day (keyed by start-of-day epoch). */
+  bodyweights!: Table<BodyLog, number>
 
   constructor() {
     super('forge')
@@ -24,6 +29,12 @@ export class ForgeDB extends Dexie {
             if (!s.uuid) s.uuid = crypto.randomUUID()
           })
       })
+    this.version(3).stores({
+      sessions: '++id, uuid, dayType, startedAt',
+      settings: 'id',
+      exercises: 'id',
+      bodyweights: 'at',
+    })
   }
 }
 
@@ -101,28 +112,91 @@ export async function applyRemoteSessions(remote: Session[]): Promise<void> {
   })
 }
 
+// ── Custom exercises ────────────────────────────────────
+/** Read the user's custom exercises and merge them into the live catalog. */
+export async function loadCustomExercises(): Promise<Exercise[]> {
+  const custom = await db.exercises.toArray()
+  registerCustomExercises(custom)
+  return custom
+}
+
+/** Read the custom exercises without re-registering (for management UIs). */
+export async function getCustomExercises(): Promise<Exercise[]> {
+  return db.exercises.toArray()
+}
+
+export async function saveCustomExercise(exercise: Exercise): Promise<void> {
+  await db.exercises.put(exercise)
+  await loadCustomExercises()
+}
+
+export async function deleteCustomExercise(id: string): Promise<void> {
+  await db.exercises.delete(id)
+  await loadCustomExercises()
+}
+
+// ── Bodyweight log ──────────────────────────────────────
+/** Start-of-day epoch for a timestamp, so there's one bodyweight row per day. */
+export function dayKey(ts: number): number {
+  const d = new Date(ts)
+  d.setHours(0, 0, 0, 0)
+  return d.getTime()
+}
+
+/** All bodyweight readings, oldest first. */
+export async function getBodyLog(): Promise<BodyLog[]> {
+  return db.bodyweights.orderBy('at').toArray()
+}
+
+export async function saveBodyweight(kg: number, at: number = Date.now()): Promise<void> {
+  await db.bodyweights.put({ at: dayKey(at), kg })
+}
+
+export async function deleteBodyweight(at: number): Promise<void> {
+  await db.bodyweights.delete(at)
+}
+
 export async function exportData(): Promise<string> {
   const sessions = await db.sessions.toArray()
   const settings = await getSettings()
-  return JSON.stringify({ version: 1, exportedAt: Date.now(), sessions, settings }, null, 2)
+  const exercises = await db.exercises.toArray()
+  const bodyweights = await db.bodyweights.toArray()
+  return JSON.stringify({ version: 2, exportedAt: Date.now(), sessions, settings, exercises, bodyweights }, null, 2)
 }
 
 export async function importData(json: string): Promise<number> {
-  const parsed = JSON.parse(json) as { sessions?: Session[]; settings?: Settings }
+  const parsed = JSON.parse(json) as {
+    sessions?: Session[]
+    settings?: Settings
+    exercises?: Exercise[]
+    bodyweights?: BodyLog[]
+  }
   if (!Array.isArray(parsed.sessions)) throw new Error('Invalid backup file')
-  await db.transaction('rw', db.sessions, db.settings, async () => {
+  await db.transaction('rw', db.sessions, db.settings, db.exercises, db.bodyweights, async () => {
     await db.sessions.clear()
     await db.sessions.bulkAdd(
       parsed.sessions!.map(({ id: _id, ...rest }) => ({ ...rest, uuid: rest.uuid ?? crypto.randomUUID() }) as Session),
     )
     if (parsed.settings) await db.settings.put({ ...parsed.settings, id: 'main' })
+    if (Array.isArray(parsed.exercises)) {
+      await db.exercises.clear()
+      await db.exercises.bulkAdd(parsed.exercises)
+    }
+    if (Array.isArray(parsed.bodyweights)) {
+      await db.bodyweights.clear()
+      await db.bodyweights.bulkAdd(parsed.bodyweights)
+    }
   })
+  await loadCustomExercises()
   return parsed.sessions.length
 }
 
 export async function wipeAll(): Promise<void> {
-  await db.transaction('rw', db.sessions, db.settings, async () => {
+  await db.transaction('rw', db.sessions, db.settings, db.exercises, db.bodyweights, async () => {
     await db.sessions.clear()
     await db.settings.clear()
+    await db.exercises.clear()
+    await db.bodyweights.clear()
   })
+  await loadCustomExercises()
 }

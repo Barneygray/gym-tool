@@ -1,12 +1,18 @@
 import { useMemo, useRef, useState } from 'react'
-import type { Muscle, Session } from '../types'
+import type { BodyLog, Muscle, Session } from '../types'
 import { EXERCISES, getExercise } from '../data/exercises'
 import { e1rmTrend, prsFor, volumeByMuscle, type E1rmPoint } from '../engine/stats'
+import { bodyweightAt, latestBodyweight } from '../engine/bodyweight'
+import { MUSCLE_TARGETS, volumeStatus, weeklySetsByMuscle, type VolumeStatus } from '../engine/volume'
 import { performancesOf } from '../engine/history'
+import { saveBodyweight } from '../db/db'
 import { formatNum } from '../components/Stepper'
 
 /** Validated against the dark surface (dataviz six-checks). */
 const MARK = '#f4581f'
+const STATUS_COLOR: Record<VolumeStatus, string> = {
+  none: 'var(--surface-2)', under: '#eab308', optimal: '#57d98f', high: '#ff5d5d',
+}
 
 const MUSCLE_LABEL: Record<Muscle, string> = {
   chest: 'Chest', back: 'Back', shoulders: 'Shoulders', biceps: 'Biceps', triceps: 'Triceps',
@@ -15,15 +21,20 @@ const MUSCLE_LABEL: Record<Muscle, string> = {
 
 const WEEK = 7 * 86_400_000
 
-export function ProgressScreen({ history }: { history: Session[] }) {
+export function ProgressScreen({ history, bodyLog, onChanged }: {
+  history: Session[]
+  bodyLog: BodyLog[]
+  onChanged: () => Promise<void>
+}) {
   const trained = useMemo(
     () => EXERCISES.filter((e) => performancesOf(e.id, history).length > 0),
     [history],
   )
+  const bwAt = useMemo(() => bodyweightAt(bodyLog), [bodyLog])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const exerciseId = selectedId ?? trained[0]?.id ?? null
 
-  if (history.length === 0) {
+  if (history.length === 0 && bodyLog.length === 0) {
     return (
       <>
         <h1 className="screen-title">Progress</h1>
@@ -32,12 +43,13 @@ export function ProgressScreen({ history }: { history: Session[] }) {
           Nothing logged yet.<br />
           Finish your first session and the trend lines start here.
         </div>
+        <BodyweightCard bodyLog={bodyLog} onChanged={onChanged} />
       </>
     )
   }
 
   const now = Date.now()
-  const trend = exerciseId ? e1rmTrend(exerciseId, history) : []
+  const trend = exerciseId ? e1rmTrend(exerciseId, history, bwAt) : []
 
   return (
     <>
@@ -62,10 +74,18 @@ export function ProgressScreen({ history }: { history: Session[] }) {
       )}
 
       <div className="card chart-card">
+        <div className="chart-title">Weekly hard sets</div>
+        <div className="chart-sub">Per muscle vs. its effective range, last 7 days</div>
+        <WeeklySets history={history} now={now} />
+      </div>
+
+      <div className="card chart-card">
         <div className="chart-title">This week’s volume</div>
         <div className="chart-sub">Tonnage per muscle, secondary work at half credit</div>
-        <VolumeBars history={history} now={now} />
+        <VolumeBars history={history} now={now} bwAt={bwAt} />
       </div>
+
+      <BodyweightCard bodyLog={bodyLog} onChanged={onChanged} />
 
       <div className="card chart-card">
         <div className="chart-title">Consistency</div>
@@ -73,25 +93,63 @@ export function ProgressScreen({ history }: { history: Session[] }) {
         <FrequencyBars history={history} now={now} />
       </div>
 
-      <div className="section-label">Personal records</div>
-      <div className="card">
-        <table className="pr-table">
-          <tbody>
-            {trained.map((e) => {
-              const pr = prsFor(e.id, history)
-              if (!pr.maxWeight) return null
-              return (
-                <tr key={e.id}>
-                  <td className="ex">{e.name}</td>
-                  <td className="val num">{formatNum(pr.maxWeight.weight)} kg × {pr.maxWeight.reps}</td>
-                  <td className="est num">e1RM {pr.bestE1rm ? Math.round(pr.bestE1rm.value) : '—'}</td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
+      {trained.length > 0 && (
+        <>
+          <div className="section-label">Personal records</div>
+          <div className="card">
+            <table className="pr-table">
+              <tbody>
+                {trained.map((e) => {
+                  const pr = prsFor(e.id, history, bwAt)
+                  if (!pr.maxWeight) return null
+                  return (
+                    <tr key={e.id}>
+                      <td className="ex">{e.name}</td>
+                      <td className="val num">{formatNum(Math.round(pr.maxWeight.weight * 10) / 10)} kg × {pr.maxWeight.reps}</td>
+                      <td className="est num">e1RM {pr.bestE1rm ? Math.round(pr.bestE1rm.value) : '—'}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
     </>
+  )
+}
+
+// ── Bodyweight: quick-log + trend ───────────────────────
+function BodyweightCard({ bodyLog, onChanged }: { bodyLog: BodyLog[]; onChanged: () => Promise<void> }) {
+  const [value, setValue] = useState('')
+  const current = latestBodyweight(bodyLog)
+
+  const save = async () => {
+    const kg = Number(value)
+    if (!Number.isFinite(kg) || kg <= 0) return
+    await saveBodyweight(kg)
+    setValue('')
+    await onChanged()
+  }
+
+  const first = bodyLog.length > 0 ? bodyLog.reduce((a, b) => (b.at < a.at ? b : a)).kg : null
+  const delta = current !== null && first !== null ? current - first : null
+
+  return (
+    <div className="card chart-card">
+      <div className="chart-title">Bodyweight</div>
+      <div className="chart-sub">
+        {current !== null
+          ? `Now ${formatNum(current)} kg${delta !== null && Math.abs(delta) >= 0.1 ? ` · ${delta > 0 ? '+' : ''}${formatNum(Math.round(delta * 10) / 10)} kg since start` : ''} · sharpens pull-up & dip stats`
+          : 'Log it to track the trend and get accurate pull-up / dip loads'}
+      </div>
+      {bodyLog.length >= 2 && <BodyweightChart points={bodyLog} />}
+      <div style={{ display: 'flex', gap: 8, marginTop: bodyLog.length >= 2 ? 12 : 4 }}>
+        <input style={{ flex: 1 }} type="number" inputMode="decimal" placeholder="Today’s weight (kg)"
+          value={value} onChange={(e) => setValue(e.target.value)} />
+        <button className="btn-small accent" onClick={save} disabled={!value}>Log</button>
+      </div>
+    </div>
   )
 }
 
@@ -191,9 +249,107 @@ function E1rmChart({ points }: { points: E1rmPoint[] }) {
   )
 }
 
+// ── Weekly hard sets per muscle vs. MEV/MRV band ────────
+function WeeklySets({ history, now }: { history: Session[]; now: number }) {
+  const sets = weeklySetsByMuscle(history, now - WEEK, now + 1)
+  const rows = [...sets.entries()]
+    .filter(([, n]) => n > 0)
+    .sort((a, b) => b[1] - a[1])
+
+  if (rows.length === 0) {
+    return <div className="empty-state" style={{ padding: '24px 0' }}>No training in the last 7 days.</div>
+  }
+
+  const W = 340
+  const ROW = 30
+  const H = rows.length * ROW + 6
+  const LABEL_W = 82
+  const TRACK_X = LABEL_W
+  const TRACK_W = W - LABEL_W - 40
+  // Shared scale so bars compare; headroom above the largest MRV or set count.
+  const scaleMax = Math.max(
+    ...rows.map(([m, n]) => Math.max(n, MUSCLE_TARGETS[m].mrv)),
+  ) * 1.08
+  const sx = (n: number) => (n / scaleMax) * TRACK_W
+
+  return (
+    <>
+      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Weekly hard sets per muscle against effective range">
+        {rows.map(([muscle, n], i) => {
+          const y = i * ROW + 5
+          const status = volumeStatus(muscle, n)
+          const { mev, mrv } = MUSCLE_TARGETS[muscle]
+          return (
+            <g key={muscle}>
+              <text x={LABEL_W - 8} y={y + 12} textAnchor="end" fontSize="11.5" fill="var(--text-dim)">
+                {MUSCLE_LABEL[muscle]}
+              </text>
+              {/* MEV–MRV target band */}
+              <rect x={TRACK_X + sx(mev)} y={y} width={Math.max(sx(mrv) - sx(mev), 1)} height={17} rx="3"
+                fill="var(--green-soft)" stroke="var(--line)" strokeWidth="0.5" />
+              {/* actual sets */}
+              <rect x={TRACK_X} y={y + 3} width={Math.max(sx(n), 2)} height={11} rx="3" fill={STATUS_COLOR[status]} />
+              <text x={TRACK_X + Math.max(sx(n), 2) + 6} y={y + 12.5} fontSize="11" fill="var(--text-faint)" className="num">
+                {formatNum(Math.round(n * 10) / 10)}
+              </text>
+            </g>
+          )
+        })}
+      </svg>
+      <div className="vol-legend">
+        <span><i style={{ background: STATUS_COLOR.under }} />Below range</span>
+        <span><i style={{ background: STATUS_COLOR.optimal }} />In range</span>
+        <span><i style={{ background: STATUS_COLOR.high }} />Over range</span>
+      </div>
+    </>
+  )
+}
+
+// ── Bodyweight trend line ───────────────────────────────
+function BodyweightChart({ points }: { points: BodyLog[] }) {
+  const pts = [...points].sort((a, b) => a.at - b.at)
+  const W = 340
+  const H = 120
+  const PAD = { l: 34, r: 14, t: 12, b: 20 }
+
+  const xs = pts.map((p) => p.at)
+  const ys = pts.map((p) => p.kg)
+  const x0 = Math.min(...xs)
+  const x1 = Math.max(...xs)
+  const yMin = Math.min(...ys)
+  const yMax = Math.max(...ys)
+  const yPad = Math.max((yMax - yMin) * 0.2, 0.5)
+  const lo = yMin - yPad
+  const hi = yMax + yPad
+
+  const px = (d: number) => x1 === x0
+    ? PAD.l + (W - PAD.l - PAD.r) / 2
+    : PAD.l + ((d - x0) / (x1 - x0)) * (W - PAD.l - PAD.r)
+  const py = (v: number) => PAD.t + (1 - (v - lo) / (hi - lo)) * (H - PAD.t - PAD.b)
+  const path = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${px(p.at).toFixed(1)},${py(p.kg).toFixed(1)}`).join(' ')
+  const ticks = [lo + (hi - lo) * 0.2, lo + (hi - lo) * 0.8].map((v) => Math.round(v * 10) / 10)
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`Bodyweight trend, latest ${ys[ys.length - 1]} kilograms`}
+      style={{ marginTop: 4 }}>
+      {ticks.map((t) => (
+        <g key={t}>
+          <line x1={PAD.l} x2={W - PAD.r} y1={py(t)} y2={py(t)} stroke="var(--line)" strokeWidth="1" />
+          <text x={PAD.l - 6} y={py(t) + 3.5} textAnchor="end" fontSize="10" fill="var(--text-faint)" className="num">{t}</text>
+        </g>
+      ))}
+      <path d={path} fill="none" stroke={MARK} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      {pts.map((p, i) => (
+        <circle key={i} cx={px(p.at)} cy={py(p.kg)} r={pts.length <= 20 ? 3 : 2} fill={MARK}
+          stroke="var(--surface)" strokeWidth="2" />
+      ))}
+    </svg>
+  )
+}
+
 // ── Horizontal magnitude bars: tonnage per muscle ───────
-function VolumeBars({ history, now }: { history: Session[]; now: number }) {
-  const vol = volumeByMuscle(history, now - WEEK, now + 1)
+function VolumeBars({ history, now, bwAt }: { history: Session[]; now: number; bwAt: ReturnType<typeof bodyweightAt> }) {
+  const vol = volumeByMuscle(history, now - WEEK, now + 1, bwAt)
   const rows = [...vol.entries()]
     .filter(([, v]) => v > 0)
     .sort((a, b) => b[1] - a[1])
