@@ -1,23 +1,17 @@
 import { useRef, useState } from 'react'
 import type { Settings } from '../types'
 import { exportData, importData, saveSettings, wipeAll } from '../db/db'
-import { pushSettings, signInWithEmail, signOut, supabaseConfigured, verifyEmailCode } from '../db/sync'
+import { pushSettings, supabaseConfigured } from '../db/sync'
 
 interface SettingsProps {
   settings: Settings
   onChanged: () => Promise<void>
-  syncEmail: string | null
   syncing: boolean
 }
 
-export function SettingsScreen({ settings, onChanged, syncEmail, syncing }: SettingsProps) {
+export function SettingsScreen({ settings, onChanged, syncing }: SettingsProps) {
   const [platesText, setPlatesText] = useState(settings.platesKg.join(', '))
   const [status, setStatus] = useState<string | null>(null)
-  const [email, setEmail] = useState('')
-  const [codeSent, setCodeSent] = useState(false)
-  const [code, setCode] = useState('')
-  const [verifying, setVerifying] = useState(false)
-  const [authError, setAuthError] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
   const update = async (patch: Partial<Settings>) => {
@@ -25,22 +19,6 @@ export function SettingsScreen({ settings, onChanged, syncEmail, syncing }: Sett
     await saveSettings(next)
     void pushSettings(next)
     await onChanged()
-  }
-
-  const sendCode = async () => {
-    setAuthError(null)
-    const error = await signInWithEmail(email.trim())
-    if (error) setAuthError(error)
-    else setCodeSent(true)
-  }
-
-  const verifyCode = async () => {
-    setAuthError(null)
-    setVerifying(true)
-    const error = await verifyEmailCode(email.trim(), code)
-    setVerifying(false)
-    if (error) setAuthError(error)
-    // On success, onAuthChange in App fires and swaps this card to "Backed up".
   }
 
   const savePlates = async () => {
@@ -134,52 +112,14 @@ export function SettingsScreen({ settings, onChanged, syncEmail, syncing }: Sett
         <>
           <div className="section-label">Cloud Backup</div>
           <div className="card">
-            {syncEmail ? (
-              <div className="settings-row">
-                <div>
-                  <div className="k">{syncing ? 'Syncing…' : 'Backed up ✓'}</div>
-                  <div className="sub">Signed in as {syncEmail} — restores automatically on any device</div>
+            <div className="settings-row">
+              <div>
+                <div className="k">{syncing ? 'Syncing…' : 'Backed up ✓'}</div>
+                <div className="sub">
+                  Every session saves to the cloud automatically and restores on any device — nothing to set up, no sign-in.
                 </div>
-                <button className="btn-small" onClick={() => signOut()}>Sign out</button>
               </div>
-            ) : codeSent ? (
-              <div className="settings-row" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
-                <div>
-                  <div className="k">Enter your code</div>
-                  <div className="sub">We emailed a 6-digit code to {email}. Type it here to finish — no need to leave the app.</div>
-                </div>
-                <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-                  <input style={{ flex: 1, letterSpacing: '0.25em', textAlign: 'center' }}
-                    type="text" inputMode="numeric" autoComplete="one-time-code" maxLength={6}
-                    placeholder="123456" value={code}
-                    onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))} />
-                  <button className="btn-small accent" onClick={verifyCode} disabled={code.length < 6 || verifying}>
-                    {verifying ? '…' : 'Verify'}
-                  </button>
-                </div>
-                <button className="btn-small" style={{ marginTop: 8, alignSelf: 'flex-start' }}
-                  onClick={() => { setCodeSent(false); setCode(''); setAuthError(null) }}>
-                  Use a different email
-                </button>
-                {authError && <div className="sub" style={{ color: '#ff5d5d', marginTop: 8 }}>{authError}</div>}
-              </div>
-            ) : (
-              <div className="settings-row" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
-                <div>
-                  <div className="k">Back up to the cloud</div>
-                  <div className="sub">Sign in with just your email — no password. Every session you log gets saved automatically, so losing or replacing your phone won't lose your history.</div>
-                </div>
-                <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-                  <input style={{ flex: 1 }} type="email" inputMode="email" autoComplete="email"
-                    placeholder="you@email.com" value={email}
-                    onChange={(e) => setEmail(e.target.value)} />
-                  <button className="btn-small accent" onClick={sendCode} disabled={!email.includes('@')}>
-                    Send code
-                  </button>
-                </div>
-                {authError && <div className="sub" style={{ color: '#ff5d5d', marginTop: 8 }}>{authError}</div>}
-              </div>
-            )}
+            </div>
           </div>
         </>
       )}

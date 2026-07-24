@@ -1,13 +1,9 @@
 import type { Session, Settings } from '../types'
-import { supabase, supabaseConfigured } from './supabaseClient'
+import { supabase, supabaseConfigured, ACCOUNT_KEY } from './supabaseClient'
 import { getAllSessions, getSettings, mergeRemoteSessions, saveSettings } from './db'
 import { planSessionSync } from '../engine/syncPlan'
 
 export { supabaseConfigured }
-
-export type SyncStatus =
-  | { state: 'unconfigured' | 'signed-out' | 'sending-link' | 'link-sent' }
-  | { state: 'syncing' | 'synced' | 'error'; email: string }
 
 interface SessionRow {
   uuid: string
@@ -23,69 +19,39 @@ interface SettingsRow {
   sound_on: boolean
 }
 
-export function onAuthChange(cb: (email: string | null) => void): () => void {
-  if (!supabase) return () => {}
-  supabase.auth.getSession().then(({ data }) => cb(data.session?.user.email ?? null))
-  const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
-    cb(session?.user.email ?? null)
-  })
-  return () => sub.subscription.unsubscribe()
-}
-
-/** Send the login email. Supabase delivers both a magic link and a 6-digit code. */
-export async function signInWithEmail(email: string): Promise<string | null> {
-  if (!supabase) return 'Cloud backup is not configured yet.'
-  const { error } = await supabase.auth.signInWithOtp({
-    email,
-    options: { emailRedirectTo: window.location.href },
-  })
-  return error?.message ?? null
-}
-
 /**
- * Verify the 6-digit code from the email. This is the reliable path for an
- * installed PWA on iOS, where a tapped magic link opens Safari (a separate
- * storage context) and never reaches the home-screen app.
- */
-export async function verifyEmailCode(email: string, code: string): Promise<string | null> {
-  if (!supabase) return 'Cloud backup is not configured yet.'
-  const { error } = await supabase.auth.verifyOtp({ email, token: code.trim(), type: 'email' })
-  return error?.message ?? null
-}
-
-export async function signOut(): Promise<void> {
-  await supabase?.auth.signOut()
-}
-
-/**
- * Full two-way reconciliation: push any local session the cloud doesn't have
- * yet, pull down any cloud session missing locally, and sync the settings
- * row. Safe to call repeatedly — every step is additive or idempotent.
+ * Full two-way reconciliation against the single shared backup account: push
+ * any local session the cloud doesn't have yet, pull down any cloud session
+ * missing locally, and sync the settings row. There is no sign-in — the app
+ * carries a fixed account key, so every device that opens it backs up and
+ * restores automatically. Safe to call repeatedly; every step is additive or
+ * idempotent.
  */
 export async function runSync(): Promise<void> {
   if (!supabase) return
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) return
 
   const local = await getAllSessions()
-  const { data: remoteMeta } = await supabase.from('sessions').select('uuid')
+  const { data: remoteMeta } = await supabase.from('sessions').select('uuid').eq('account', ACCOUNT_KEY)
   const { toPush, toPullUuids } = planSessionSync(local, (remoteMeta ?? []).map((r) => r.uuid as string))
 
   if (toPush.length > 0) {
-    const rows: SessionRow[] = toPush.map((s) => ({
+    const rows = toPush.map((s) => ({
       uuid: s.uuid,
+      account: ACCOUNT_KEY,
       day_type: s.dayType,
       started_at: s.startedAt,
       finished_at: s.finishedAt ?? null,
       entries: s.entries,
     }))
-    await supabase.from('sessions').upsert(rows.map((r) => ({ ...r, user_id: user.id })))
+    await supabase.from('sessions').upsert(rows)
   }
 
   if (toPullUuids.length > 0) {
-    const { data: remoteRows } = await supabase.from('sessions').select('*').in('uuid', toPullUuids)
+    const { data: remoteRows } = await supabase
+      .from('sessions')
+      .select('*')
+      .eq('account', ACCOUNT_KEY)
+      .in('uuid', toPullUuids)
     const pulled: Session[] = (remoteRows ?? []).map((r: SessionRow) => ({
       uuid: r.uuid,
       dayType: r.day_type as Session['dayType'],
@@ -96,12 +62,12 @@ export async function runSync(): Promise<void> {
     await mergeRemoteSessions(pulled)
   }
 
-  await syncSettings(user.id)
+  await syncSettings()
 }
 
-async function syncSettings(userId: string): Promise<void> {
+async function syncSettings(): Promise<void> {
   if (!supabase) return
-  const { data: remote } = await supabase.from('settings').select('*').eq('user_id', userId).maybeSingle()
+  const { data: remote } = await supabase.from('settings').select('*').eq('account', ACCOUNT_KEY).maybeSingle()
   if (remote) {
     const row = remote as SettingsRow
     await saveSettings({
@@ -111,19 +77,14 @@ async function syncSettings(userId: string): Promise<void> {
       soundOn: row.sound_on,
     })
   } else {
-    const local = await getSettings()
-    await pushSettings(local)
+    await pushSettings(await getSettings())
   }
 }
 
 export async function pushSettings(settings: Settings): Promise<void> {
   if (!supabase) return
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) return
   await supabase.from('settings').upsert({
-    user_id: user.id,
+    account: ACCOUNT_KEY,
     bar_weight_kg: settings.barWeightKg,
     plates_kg: settings.platesKg,
     sound_on: settings.soundOn,
@@ -132,13 +93,9 @@ export async function pushSettings(settings: Settings): Promise<void> {
 
 export async function pushSession(session: Session): Promise<void> {
   if (!supabase) return
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) return
   await supabase.from('sessions').upsert({
     uuid: session.uuid,
-    user_id: user.id,
+    account: ACCOUNT_KEY,
     day_type: session.dayType,
     started_at: session.startedAt,
     finished_at: session.finishedAt ?? null,
