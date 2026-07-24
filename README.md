@@ -28,9 +28,9 @@ tells you exactly what to lift next.
 - **Your data, yours** — everything lives on-device (IndexedDB); one-tap JSON
   export/import in Settings.
 - **Zero-setup cloud backup** — sessions also sync to a Supabase table
-  automatically, with no sign-in. Every device that opens the app carries the
-  same fixed account key, so a lost or replaced phone gets its full history back
-  the moment it opens the app. See "Cloud backup" below.
+  automatically, with no sign-in. Every device that opens the app shares one
+  data bucket, so a lost or replaced phone gets its full history back the moment
+  it opens the app. See "Cloud backup" below.
 
 ## Stack
 
@@ -54,17 +54,20 @@ your phone and "Add to Home Screen" — it runs full-screen and fully offline.
 
 ## Cloud backup
 
-Backup is on by default and needs no sign-in. The app carries one fixed account
-key (`ACCOUNT_KEY` in `src/db/supabaseClient.ts`) and syncs every session to
+Backup is on by default and needs no sign-in. The app shares one data bucket
+keyed by a constant (`OWNER` in `src/db/sync.ts`) and syncs every session to
 Supabase under it, so any device that opens the app both backs up and restores
-automatically.
+automatically. Sync runs on app open and after each logged session or settings
+change, and fails silently when offline (the next sync reconciles). Settings
+also has a manual **Sync now** button.
 
 One-time setup (already done for the bundled project): create a Supabase
 project, drop its URL + anon key into `src/db/supabaseClient.ts`, and run
 `supabase-schema.sql` once in the SQL Editor. That's the whole backend.
 
-**Privacy trade-off:** the account key ships in the app's public code and the
-backup tables grant the anon role access, so anyone who found the app's URL and
-inspected it could read or overwrite the data. For a personal training log on an
-obscure URL that's an accepted trade for zero-friction, no-login backup. Keep
-the repo/site private if you'd rather lock it down.
+**Privacy trade-off:** the anon key and the `OWNER` key both ship in the app's
+public code, and the backup tables grant the anon role access, so anyone who
+found the app's URL and inspected it could read or overwrite the data. For a
+personal training log on an obscure URL that's an accepted trade for
+zero-friction, no-login backup. Keep the repo/site private if you'd rather lock
+it down.

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { DayType, Session, SetLog, Settings } from './types'
 import { DEFAULT_SETTINGS, getHistory, getSettings } from './db/db'
-import { runSync } from './db/sync'
+import { runSync, supabaseConfigured } from './db/sync'
 import { BarbellIcon, ChartIcon, GearIcon, KettlebellIcon, StretchIcon } from './components/Icons'
 import { TodayScreen } from './screens/Today'
 import { WorkoutScreen } from './screens/Workout'
@@ -47,17 +47,22 @@ export default function App() {
   }, [])
   refreshRef.current = refresh
 
-  useEffect(() => {
-    refresh().then(() => setReady(true))
-  }, [refresh])
+  const syncNow = useCallback(async () => {
+    if (!supabaseConfigured) return
+    setSyncing(true)
+    try {
+      await runSync()
+      await refreshRef.current()
+    } finally {
+      setSyncing(false)
+    }
+  }, [])
 
   useEffect(() => {
-    setSyncing(true)
-    runSync()
-      .then(() => refreshRef.current())
-      .catch(() => {})
-      .finally(() => setSyncing(false))
-  }, [])
+    refresh()
+      .then(() => setReady(true))
+      .then(() => syncNow())
+  }, [refresh, syncNow])
 
   const setActive = useCallback((w: ActiveWorkout | null) => {
     setActiveState(w)
@@ -89,7 +94,12 @@ export default function App() {
             {tab === 'condition' && <ConditioningScreen history={history} onLogged={refresh} />}
             {tab === 'progress' && <ProgressScreen history={history} />}
             {tab === 'settings' && (
-              <SettingsScreen settings={settings} onChanged={refresh} syncing={syncing} />
+              <SettingsScreen
+                settings={settings}
+                onChanged={refresh}
+                syncing={syncing}
+                onSyncNow={syncNow}
+              />
             )}
           </>
         )}

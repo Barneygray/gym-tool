@@ -7,9 +7,10 @@ interface SettingsProps {
   settings: Settings
   onChanged: () => Promise<void>
   syncing: boolean
+  onSyncNow: () => Promise<void>
 }
 
-export function SettingsScreen({ settings, onChanged, syncing }: SettingsProps) {
+export function SettingsScreen({ settings, onChanged, syncing, onSyncNow }: SettingsProps) {
   const [platesText, setPlatesText] = useState(settings.platesKg.join(', '))
   const [status, setStatus] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -114,11 +115,12 @@ export function SettingsScreen({ settings, onChanged, syncing }: SettingsProps) 
           <div className="card">
             <div className="settings-row">
               <div>
-                <div className="k">{syncing ? 'Syncing…' : 'Backed up ✓'}</div>
-                <div className="sub">
-                  Every session saves to the cloud automatically and restores on any device — nothing to set up, no sign-in.
-                </div>
+                <div className="k">{syncing ? 'Syncing…' : 'Cloud sync on ✓'}</div>
+                <div className="sub">Every session saves to the cloud automatically. Open the app on any device to get your full history back.</div>
               </div>
+              <button className="btn-small" onClick={() => onSyncNow()} disabled={syncing}>
+                {syncing ? '…' : 'Sync now'}
+              </button>
             </div>
           </div>
         </>
