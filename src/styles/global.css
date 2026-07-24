@@ -644,3 +644,43 @@ input:focus, textarea:focus { border-color: var(--ember-deep); }
 }
 .toggle.on { background: var(--ember-deep); }
 .toggle.on::after { transform: translateX(20px); background: #fff; }
+
+/* ── Training block banner (mesocycle) ───────────────── */
+.block-banner {
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  margin-bottom: 14px;
+}
+.block-banner.accumulation { background: linear-gradient(150deg, var(--ember-soft), var(--surface) 74%); border-color: rgba(255, 109, 58, 0.3); }
+.block-banner.deload { background: linear-gradient(150deg, var(--green-soft), var(--surface) 74%); border-color: rgba(87, 217, 143, 0.3); }
+.block-label { font-weight: 750; font-size: 14px; letter-spacing: 0.01em; }
+.block-banner.accumulation .block-label { color: var(--ember); }
+.block-banner.deload .block-label { color: var(--green); }
+.block-note { color: var(--text-dim); font-size: 13px; margin-top: 3px; line-height: 1.4; }
+
+/* ── Goals ───────────────────────────────────────────── */
+.goal-row { padding: 12px 0; border-bottom: 1px solid var(--line); }
+.goal-row:last-of-type { border-bottom: none; }
+.goal-head { display: flex; align-items: baseline; gap: 10px; }
+.goal-name { font-weight: 650; font-size: 15px; flex: 1; min-width: 0; }
+.goal-target { color: var(--text-dim); font-size: 13px; white-space: nowrap; }
+.goal-bar {
+  position: relative;
+  height: 18px;
+  background: var(--surface-2);
+  border-radius: 9px;
+  margin-top: 8px;
+  overflow: hidden;
+}
+.goal-bar-fill { height: 100%; border-radius: 9px; transition: width 0.3s; min-width: 4px; }
+.goal-bar-pct {
+  position: absolute;
+  top: 0;
+  right: 8px;
+  line-height: 18px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-dim);
+}
+.goal-detail { color: var(--text-faint); font-size: 12.5px; margin-top: 6px; line-height: 1.4; }

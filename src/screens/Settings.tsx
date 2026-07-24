@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
-import type { Equipment, Exercise, Muscle, Settings } from '../types'
+import type { DaySlot, DayTemplate, Equipment, Exercise, Muscle, Settings } from '../types'
 import {
-  deleteCustomExercise, exportData, getCustomExercises, importData, saveCustomExercise, saveSettings, wipeAll,
+  deleteCustomDay, deleteCustomExercise, exportData, getCustomDays, getCustomExercises,
+  importData, saveCustomDay, saveCustomExercise, saveSettings, wipeAll,
 } from '../db/db'
-import { makeCustomExercise } from '../data/exercises'
-import { pushSettings, supabaseConfigured } from '../db/sync'
+import { EXERCISES, makeCustomExercise } from '../data/exercises'
+import { makeCustomDay } from '../data/days'
+import { phaseFor } from '../engine/mesocycle'
+import { hasPrivateSyncKey, pushSettings, setSyncKey, supabaseConfigured } from '../db/sync'
 import { notificationPermission, notificationsSupported, requestNotifications } from '../notify'
 import { TrashIcon } from '../components/Icons'
 
@@ -129,8 +132,17 @@ export function SettingsScreen({ settings, onChanged, syncing, onSyncNow, syncEr
         <RestAlertsRow />
       </div>
 
+      <div className="section-label">Training block</div>
+      <TrainingBlock settings={settings} update={update} />
+
+      <div className="section-label">Reminders</div>
+      <Reminders settings={settings} update={update} />
+
       <div className="section-label">Exercises</div>
       <CustomExercises onChanged={onChanged} />
+
+      <div className="section-label">Program</div>
+      <CustomDays onChanged={onChanged} />
 
       {supabaseConfigured && (
         <>
@@ -152,6 +164,7 @@ export function SettingsScreen({ settings, onChanged, syncing, onSyncNow, syncEr
                 {syncError} We’ll retry on the next change or sync.
               </div>
             )}
+            <PrivateSyncKey onSyncNow={onSyncNow} />
           </div>
         </>
       )}
@@ -330,6 +343,307 @@ function ExerciseForm({ onSave, onCancel }: {
         <button className="btn-small" style={{ flex: 1 }} onClick={onCancel}>Cancel</button>
         <button className="btn-small accent" style={{ flex: 1, opacity: valid ? 1 : 0.4 }}
           disabled={!valid} onClick={submit}>Save exercise</button>
+      </div>
+    </div>
+  )
+}
+
+// ── Training block (mesocycle) ──────────────────────────
+const BLOCK_LENGTHS = [3, 4, 5, 6]
+
+function TrainingBlock({ settings, update }: {
+  settings: Settings
+  update: (patch: Partial<Settings>) => Promise<void>
+}) {
+  const [weeks, setWeeks] = useState(settings.meso?.weeks ?? 4)
+  const phase = phaseFor(settings.meso, Date.now())
+
+  const start = () => update({ meso: { startAt: Date.now(), weeks } })
+  const end = () => update({ meso: null })
+
+  if (settings.meso && phase) {
+    return (
+      <div className="card">
+        <div className="settings-row">
+          <div>
+            <div className="k">{phase.label}</div>
+            <div className="sub">{phase.note}</div>
+          </div>
+          <button className="btn-small" onClick={end}>End block</button>
+        </div>
+        <div className="sub" style={{ paddingTop: 8 }}>
+          Accumulation weeks ramp your prescribed sets; the last week is a planned deload. The block
+          rolls into a fresh cycle automatically.
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="card">
+      <div className="settings-row" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+        <div>
+          <div className="k">Run a mesocycle</div>
+          <div className="sub">
+            Ramp volume week to week, then auto-schedule a deload — structured progression instead of grinding every session.
+          </div>
+        </div>
+        <div className="seg" style={{ marginTop: 12 }}>
+          {BLOCK_LENGTHS.map((w) => (
+            <button key={w} className={weeks === w ? 'on' : ''} onClick={() => setWeeks(w)}>{w} wk</button>
+          ))}
+        </div>
+        <button className="btn-primary" style={{ marginTop: 12 }} onClick={start}>
+          Start {weeks}-week block
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ── Daily training reminder ─────────────────────────────
+const REMINDER_HOURS = [7, 9, 12, 15, 17, 19]
+
+function Reminders({ settings, update }: {
+  settings: Settings
+  update: (patch: Partial<Settings>) => Promise<void>
+}) {
+  const on = !!settings.reminder
+  const hour = settings.reminder?.hour ?? 17
+  const [perm, setPerm] = useState(notificationPermission())
+
+  const toggle = () => update({ reminder: on ? null : { hour } })
+  const setHour = (h: number) => update({ reminder: { hour: h } })
+  const enableNotifs = async () => setPerm(await requestNotifications())
+
+  const fmtHour = (h: number) => {
+    const am = h < 12
+    const h12 = h % 12 === 0 ? 12 : h % 12
+    return `${h12}${am ? 'am' : 'pm'}`
+  }
+
+  return (
+    <div className="card">
+      <div className="settings-row">
+        <div>
+          <div className="k">Time to train</div>
+          <div className="sub">A daily nudge to train if you haven’t yet — names the day the coach picks.</div>
+        </div>
+        <button className={`toggle${on ? ' on' : ''}`} aria-label="Toggle training reminder" onClick={toggle} />
+      </div>
+      {on && (
+        <>
+          <div className="settings-row" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+            <div className="k">Remind me at</div>
+            <div className="seg" style={{ marginTop: 10 }}>
+              {REMINDER_HOURS.map((h) => (
+                <button key={h} className={hour === h ? 'on' : ''} onClick={() => setHour(h)}>{fmtHour(h)}</button>
+              ))}
+            </div>
+          </div>
+          {notificationsSupported() && perm !== 'granted' && (
+            <div className="settings-row">
+              <div>
+                <div className="k">Allow notifications</div>
+                <div className="sub">
+                  {perm === 'denied'
+                    ? 'Blocked — enable notifications for this site in your browser'
+                    : 'Needed to nudge you; otherwise it only shows when the app is open'}
+                </div>
+              </div>
+              <button className="btn-small accent" onClick={enableNotifs} disabled={perm === 'denied'}>Enable</button>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
+// ── Private cloud-backup key ────────────────────────────
+function PrivateSyncKey({ onSyncNow }: { onSyncNow: () => Promise<void> }) {
+  const [priv, setPriv] = useState(hasPrivateSyncKey())
+  const [editing, setEditing] = useState(false)
+  const [value, setValue] = useState('')
+
+  const apply = async () => {
+    const key = value.trim()
+    if (key.length < 4) return
+    setSyncKey(key)
+    setPriv(true)
+    setEditing(false)
+    setValue('')
+    await onSyncNow()
+  }
+  const clear = async () => {
+    if (!window.confirm('Switch back to the shared public bucket? Your private backup stays in the cloud but this device stops using it.')) return
+    setSyncKey(null)
+    setPriv(false)
+    await onSyncNow()
+  }
+
+  return (
+    <div className="settings-row" style={{ flexDirection: 'column', alignItems: 'stretch', borderTop: '1px solid var(--line)', marginTop: 10, paddingTop: 12 }}>
+      <div>
+        <div className="k">Private sync key {priv && <span style={{ color: 'var(--green)' }}>· on ✓</span>}</div>
+        <div className="sub">
+          {priv
+            ? 'Backup is scoped to a bucket only this passphrase can reach. Use the same key on every device to share history.'
+            : 'By default all installs share one public bucket. Set a passphrase to scope your backup to a private bucket — the key never ships in the app.'}
+        </div>
+      </div>
+      {editing || !priv ? (
+        <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+          <input style={{ flex: 1 }} type="password" placeholder="Passphrase (4+ chars)" value={value}
+            onChange={(e) => setValue(e.target.value)} />
+          <button className="btn-small accent" onClick={apply} disabled={value.trim().length < 4}>
+            {priv ? 'Update' : 'Use key'}
+          </button>
+          {editing && <button className="btn-small" onClick={() => { setEditing(false); setValue('') }}>Cancel</button>}
+        </div>
+      ) : (
+        <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+          <button className="btn-small" onClick={() => setEditing(true)}>Change key</button>
+          <button className="btn-small danger" onClick={clear}>Use shared bucket</button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Program builder (custom days) ───────────────────────
+function CustomDays({ onChanged }: { onChanged: () => Promise<void> }) {
+  const [list, setList] = useState<DayTemplate[]>([])
+  const [adding, setAdding] = useState(false)
+
+  const reload = async () => setList(await getCustomDays())
+  useEffect(() => { void reload() }, [])
+
+  const remove = async (id: string) => {
+    if (!window.confirm('Delete this day? Past sessions logged under it are kept.')) return
+    await deleteCustomDay(id)
+    await reload()
+    await onChanged()
+  }
+  const add = async (day: DayTemplate) => {
+    await saveCustomDay(day)
+    await reload()
+    await onChanged()
+    setAdding(false)
+  }
+
+  return (
+    <div className="card">
+      {list.length === 0 && !adding && (
+        <p className="sub" style={{ padding: '4px 0 12px' }}>
+          Build your own split — upper/lower, full-body, whatever you run. Custom days appear on Train
+          with the same rotation, progression, and stats as the built-ins.
+        </p>
+      )}
+      {list.map((d) => (
+        <div className="settings-row" key={d.id}>
+          <div>
+            <div className="k">{d.name}</div>
+            <div className="sub">
+              {d.slots.length} exercise{d.slots.length === 1 ? '' : 's'} · {d.muscles.map((m) => MUSCLE_LABEL[m]).join(', ')}
+            </div>
+          </div>
+          <button className="set-del" aria-label={`Delete ${d.name}`} onClick={() => remove(d.id)}>
+            <TrashIcon size={18} />
+          </button>
+        </div>
+      ))}
+      {adding ? (
+        <DayForm onSave={add} onCancel={() => setAdding(false)} />
+      ) : (
+        <button className="btn-small accent" style={{ marginTop: list.length > 0 ? 12 : 0 }}
+          onClick={() => setAdding(true)}>
+          + New day
+        </button>
+      )}
+    </div>
+  )
+}
+
+function DayForm({ onSave, onCancel }: {
+  onSave: (d: DayTemplate) => Promise<void>
+  onCancel: () => void
+}) {
+  const [name, setName] = useState('')
+  const [picks, setPicks] = useState<string[]>([])
+  const [picking, setPicking] = useState(false)
+
+  const valid = name.trim().length > 0 && picks.length > 0
+
+  const submit = async () => {
+    if (!valid) return
+    const slots: DaySlot[] = picks.map((id) => {
+      const ex = EXERCISES.find((e) => e.id === id)!
+      return { muscle: ex.primary, pool: [id] }
+    })
+    await onSave(makeCustomDay({ name, slots }))
+  }
+
+  return (
+    <div className="ex-form">
+      <input placeholder="Day name — e.g. Upper A" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
+      {picks.map((id, i) => {
+        const ex = EXERCISES.find((e) => e.id === id)
+        return (
+          <div className="preview-row" key={id}>
+            <div style={{ minWidth: 0 }}>
+              <div className="name">{ex?.name ?? id}</div>
+              <div className="detail">{ex ? MUSCLE_LABEL[ex.primary] : ''}</div>
+            </div>
+            <button className="swap-btn" aria-label={`Remove ${ex?.name}`}
+              onClick={() => setPicks((p) => p.filter((_, idx) => idx !== i))}>
+              <TrashIcon size={16} />
+            </button>
+          </div>
+        )
+      })}
+      {picking ? (
+        <DayExercisePicker existing={picks} onPick={(id) => { setPicks((p) => [...p, id]); setPicking(false) }}
+          onCancel={() => setPicking(false)} />
+      ) : (
+        <button className="btn-ghost" style={{ marginTop: 8 }} onClick={() => setPicking(true)}>+ Add exercise</button>
+      )}
+      <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+        <button className="btn-small" style={{ flex: 1 }} onClick={onCancel}>Cancel</button>
+        <button className="btn-small accent" style={{ flex: 1, opacity: valid ? 1 : 0.4 }}
+          disabled={!valid} onClick={submit}>Save day</button>
+      </div>
+    </div>
+  )
+}
+
+function DayExercisePicker({ existing, onPick, onCancel }: {
+  existing: string[]
+  onPick: (id: string) => void
+  onCancel: () => void
+}) {
+  const [query, setQuery] = useState('')
+  const taken = new Set(existing)
+  const q = query.trim().toLowerCase()
+  const options = EXERCISES
+    .filter((e) => !taken.has(e.id) && (q === '' || e.name.toLowerCase().includes(q)))
+    .sort((a, b) => a.name.localeCompare(b.name))
+
+  return (
+    <div className="add-picker">
+      <div className="add-picker-head">
+        <input autoFocus placeholder="Search exercises…" value={query}
+          onChange={(e) => setQuery(e.target.value)} style={{ flex: 1 }} />
+        <button className="btn-small" onClick={onCancel}>Done</button>
+      </div>
+      <div className="add-picker-list">
+        {options.length === 0 && <div className="add-picker-empty">No matches.</div>}
+        {options.map((e) => (
+          <button key={e.id} className="add-picker-row" onClick={() => onPick(e.id)}>
+            <span className="name">{e.name}</span>
+            <span className="muscle-tag">{MUSCLE_LABEL[e.primary]}</span>
+          </button>
+        ))}
       </div>
     </div>
   )

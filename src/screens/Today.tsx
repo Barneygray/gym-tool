@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react'
-import type { DayType, Muscle, Session, Settings } from '../types'
+import type { DayId, Muscle, Session, Settings } from '../types'
 import { DAYS, dayById } from '../data/days'
 import { EXERCISES, getExercise } from '../data/exercises'
 import { generateWorkout, swapOptions } from '../engine/rotation'
 import { suggestFor } from '../engine/progression'
 import { recommendDay } from '../engine/coach'
+import { phaseFor } from '../engine/mesocycle'
 import { lastSessionOf } from '../engine/history'
 import { recoveryByMuscle, daysSince } from '../engine/stats'
 import { ChevronIcon, CloseIcon, SwapIcon } from '../components/Icons'
@@ -23,15 +24,23 @@ interface TodayProps {
 }
 
 export function TodayScreen({ history, settings, startWorkout }: TodayProps) {
-  const [previewDay, setPreviewDay] = useState<DayType | null>(null)
+  const [previewDay, setPreviewDay] = useState<DayId | null>(null)
   const now = Date.now()
   const recovery = useMemo(() => recoveryByMuscle(history, now), [history, now])
   const rec = useMemo(() => recommendDay(history, now), [history, now])
+  const phase = useMemo(() => phaseFor(settings.meso, now), [settings.meso, now])
 
   return (
     <>
       <h1 className="screen-title">Train</h1>
       <p className="screen-sub">Pick today’s session — Forge remembers where you left off.</p>
+
+      {phase && (
+        <div className={`block-banner ${phase.phase}`}>
+          <div className="block-label">{phase.label}</div>
+          <div className="block-note">{phase.note}</div>
+        </div>
+      )}
 
       <button className="coach-card" onClick={() => setPreviewDay(rec.dayType)}>
         <div className="coach-kind">Train next</div>
@@ -90,6 +99,7 @@ export function TodayScreen({ history, settings, startWorkout }: TodayProps) {
           dayType={previewDay}
           history={history}
           settings={settings}
+          phase={phase}
           onClose={() => setPreviewDay(null)}
           onStart={(exerciseIds) => {
             startWorkout({
@@ -114,10 +124,11 @@ function freshnessColor(days: number): string {
   return 'var(--green)' // recovered, ready to hit
 }
 
-function WorkoutPreview({ dayType, history, settings, onClose, onStart }: {
-  dayType: DayType
+function WorkoutPreview({ dayType, history, settings, phase, onClose, onStart }: {
+  dayType: DayId
   history: Session[]
   settings: Settings
+  phase: ReturnType<typeof phaseFor>
   onClose: () => void
   onStart: (exerciseIds: string[]) => void
 }) {
@@ -152,7 +163,7 @@ function WorkoutPreview({ dayType, history, settings, onClose, onStart }: {
         </p>
         {exerciseIds.map((id, i) => {
           const exercise = getExercise(id)
-          const suggestion = suggestFor(exercise, history, settings)
+          const suggestion = suggestFor(exercise, history, settings, phase)
           return (
             <div className="preview-row" key={id}>
               <div style={{ minWidth: 0 }}>

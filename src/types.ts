@@ -12,8 +12,15 @@ export type Muscle =
 
 export type DayType = 'push' | 'pull' | 'legs' | 'shoulders-arms' | 'chest-back'
 
+/**
+ * Any gym day identity — a built-in `DayType` or a user-built custom day's id.
+ * The `string & {}` keeps the built-in literals as editor suggestions while
+ * still admitting the arbitrary ids the program builder mints.
+ */
+export type DayId = DayType | (string & {})
+
 /** Sessions cover gym days plus logged conditioning work. */
-export type SessionKind = DayType | 'conditioning'
+export type SessionKind = DayId | 'conditioning'
 
 export type Equipment =
   | 'barbell'
@@ -79,6 +86,26 @@ export interface Settings {
   /** Plate denominations available, per side, in kg. */
   platesKg: number[]
   soundOn: boolean
+  /** Active training block. null/absent = no periodization (session-to-session). */
+  meso?: MesoConfig | null
+  /** Daily "time to train" nudge. Absent = off. */
+  reminder?: ReminderConfig | null
+}
+
+/**
+ * A mesocycle: a repeating block of `weeks` where accumulation weeks ramp
+ * volume and the final week is a planned deload. Device-local, not cloud-synced.
+ */
+export interface MesoConfig {
+  /** Epoch (ms) at which week 1 of the block began. */
+  startAt: number
+  /** Total weeks per cycle, deload included. Minimum 3. */
+  weeks: number
+}
+
+export interface ReminderConfig {
+  /** Local hour of day (0–23) to nudge if you haven't trained yet. */
+  hour: number
 }
 
 export interface Suggestion {
@@ -96,10 +123,12 @@ export interface DaySlot {
 }
 
 export interface DayTemplate {
-  id: DayType
+  id: DayId
   name: string
   muscles: Muscle[]
   slots: DaySlot[]
+  /** Set on user-built days; built-in templates leave it undefined. */
+  custom?: boolean
 }
 
 export interface Stretch {
@@ -109,6 +138,19 @@ export interface Stretch {
   holdSec: number
   perSide: boolean
   cue: string
+}
+
+/** A strength goal: reach `targetE1rm` on an exercise, optionally by a date. */
+export interface Goal {
+  id: string
+  exerciseId: string
+  /** Target estimated 1RM in kg. */
+  targetE1rm: number
+  createdAt: number
+  /** Optional deadline (epoch ms) to pace against. */
+  targetDate?: number
+  /** Set when first reached (epoch ms), so hit goals stay celebrated. */
+  achievedAt?: number
 }
 
 export interface ConditioningMove {

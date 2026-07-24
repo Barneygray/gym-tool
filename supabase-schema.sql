@@ -28,7 +28,10 @@ create table settings (
 
 -- The app talks to these with the public anon key and no login, so allow the
 -- anon role to read/write. (Personal single-user app; protection is the
--- unlisted app URL.)
+-- unlisted app URL, plus an optional per-device passphrase that scopes each
+-- device's rows to a private `owner` bucket — see "Private sync key" in the
+-- README. The passphrase is never sent to the server; it only changes which
+-- `owner` value the client reads and writes.)
 alter table sessions enable row level security;
 alter table settings enable row level security;
 
