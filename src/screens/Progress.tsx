@@ -1,12 +1,14 @@
 import { useMemo, useRef, useState } from 'react'
-import type { BodyLog, Muscle, Session } from '../types'
+import type { BodyLog, Goal, Muscle, Session } from '../types'
 import { EXERCISES, getExercise } from '../data/exercises'
 import { e1rmTrend, prsFor, volumeByMuscle, type E1rmPoint } from '../engine/stats'
 import { bodyweightAt, latestBodyweight } from '../engine/bodyweight'
 import { MUSCLE_TARGETS, volumeStatus, weeklySetsByMuscle, type VolumeStatus } from '../engine/volume'
+import { projectGoal } from '../engine/goals'
 import { performancesOf } from '../engine/history'
-import { saveBodyweight } from '../db/db'
+import { deleteGoal, saveBodyweight, saveGoal } from '../db/db'
 import { formatNum } from '../components/Stepper'
+import { TrashIcon } from '../components/Icons'
 
 /** Validated against the dark surface (dataviz six-checks). */
 const MARK = '#f4581f'
@@ -21,9 +23,10 @@ const MUSCLE_LABEL: Record<Muscle, string> = {
 
 const WEEK = 7 * 86_400_000
 
-export function ProgressScreen({ history, bodyLog, onChanged }: {
+export function ProgressScreen({ history, bodyLog, goals, onChanged }: {
   history: Session[]
   bodyLog: BodyLog[]
+  goals: Goal[]
   onChanged: () => Promise<void>
 }) {
   const trained = useMemo(
@@ -43,6 +46,7 @@ export function ProgressScreen({ history, bodyLog, onChanged }: {
           Nothing logged yet.<br />
           Finish your first session and the trend lines start here.
         </div>
+        <GoalsCard goals={goals} history={history} bwAt={bwAt} now={Date.now()} onChanged={onChanged} />
         <BodyweightCard bodyLog={bodyLog} onChanged={onChanged} />
       </>
     )
@@ -72,6 +76,8 @@ export function ProgressScreen({ history, bodyLog, onChanged }: {
           </div>
         </>
       )}
+
+      <GoalsCard goals={goals} history={history} bwAt={bwAt} now={now} onChanged={onChanged} />
 
       <div className="card chart-card">
         <div className="chart-title">Weekly hard sets</div>
@@ -148,6 +154,143 @@ function BodyweightCard({ bodyLog, onChanged }: { bodyLog: BodyLog[]; onChanged:
         <input style={{ flex: 1 }} type="number" inputMode="decimal" placeholder="Today’s weight (kg)"
           value={value} onChange={(e) => setValue(e.target.value)} />
         <button className="btn-small accent" onClick={save} disabled={!value}>Log</button>
+      </div>
+    </div>
+  )
+}
+
+// ── Goals: targets + e1RM projection ────────────────────
+function GoalsCard({ goals, history, bwAt, now, onChanged }: {
+  goals: Goal[]
+  history: Session[]
+  bwAt: ReturnType<typeof bodyweightAt>
+  now: number
+  onChanged: () => Promise<void>
+}) {
+  const [adding, setAdding] = useState(false)
+
+  const remove = async (id: string) => {
+    await deleteGoal(id)
+    await onChanged()
+  }
+  const add = async (goal: Goal) => {
+    await saveGoal(goal)
+    await onChanged()
+    setAdding(false)
+  }
+
+  return (
+    <>
+      <div className="section-label">Goals</div>
+      <div className="card">
+        {goals.length === 0 && !adding && (
+          <p className="sub" style={{ padding: '4px 0 12px', color: 'var(--text-dim)', fontSize: 14 }}>
+            Set an estimated-1RM target and Forge projects when you’ll hit it from your trend.
+          </p>
+        )}
+        {goals.map((g) => (
+          <GoalRow key={g.id} goal={g} proj={projectGoal(g, history, bwAt, now)} onDelete={() => remove(g.id)} />
+        ))}
+        {adding ? (
+          <GoalForm history={history} onSave={add} onCancel={() => setAdding(false)} />
+        ) : (
+          <button className="btn-small accent" style={{ marginTop: goals.length > 0 ? 12 : 0 }}
+            onClick={() => setAdding(true)}>
+            + New goal
+          </button>
+        )}
+      </div>
+    </>
+  )
+}
+
+function GoalRow({ goal, proj, onDelete }: {
+  goal: Goal
+  proj: ReturnType<typeof projectGoal>
+  onDelete: () => void
+}) {
+  const name = getExercise(goal.exerciseId).name
+  const pctText = `${Math.round(proj.pct * 100)}%`
+  const barColor = proj.achieved ? 'var(--green)' : MARK
+  const detail = proj.achieved
+    ? 'Hit it 🎉 — set a bigger one.'
+    : proj.projectedAt !== null
+      ? `On trend for ${fmtDate(proj.projectedAt)}${proj.perWeek > 0 ? ` · +${formatNum(Math.round(proj.perWeek * 10) / 10)} kg/wk` : ''}${proj.onPace === false ? ' · behind deadline' : proj.onPace === true ? ' · on pace' : ''}`
+      : 'Keep logging — need an upward trend to project a date.'
+
+  return (
+    <div className="goal-row">
+      <div className="goal-head">
+        <div className="goal-name">{name}</div>
+        <div className="goal-target num">
+          {formatNum(Math.round(proj.current))} / {formatNum(goal.targetE1rm)} kg
+        </div>
+        <button className="set-del" aria-label={`Delete ${name} goal`} onClick={onDelete}>
+          <TrashIcon size={16} />
+        </button>
+      </div>
+      <div className="goal-bar">
+        <div className="goal-bar-fill" style={{ width: `${Math.max(proj.pct * 100, 2)}%`, background: barColor }} />
+        <span className="goal-bar-pct num">{pctText}</span>
+      </div>
+      <div className="goal-detail">{detail}</div>
+    </div>
+  )
+}
+
+function GoalForm({ history, onSave, onCancel }: {
+  history: Session[]
+  onSave: (g: Goal) => Promise<void>
+  onCancel: () => void
+}) {
+  // Offer trained lifts first (we can project those), then the rest.
+  const trained = EXERCISES.filter((e) => performancesOf(e.id, history).length > 0)
+  const rest = EXERCISES.filter((e) => performancesOf(e.id, history).length === 0)
+  const ordered = [...trained, ...rest]
+  const [exerciseId, setExerciseId] = useState(ordered[0]?.id ?? '')
+  const [target, setTarget] = useState('')
+  const [date, setDate] = useState('')
+
+  const valid = exerciseId !== '' && Number(target) > 0
+
+  const submit = async () => {
+    if (!valid) return
+    const goal: Goal = {
+      id: `goal-${crypto.randomUUID()}`,
+      exerciseId,
+      targetE1rm: Math.round(Number(target) * 10) / 10,
+      createdAt: Date.now(),
+    }
+    if (date) {
+      const d = new Date(date).getTime()
+      if (Number.isFinite(d)) goal.targetDate = d
+    }
+    await onSave(goal)
+  }
+
+  return (
+    <div className="ex-form" style={{ marginTop: 12 }}>
+      <label>
+        <span className="sub" style={{ fontSize: 12 }}>Exercise</span>
+        <select value={exerciseId} onChange={(e) => setExerciseId(e.target.value)}>
+          {ordered.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
+        </select>
+      </label>
+      <div className="ex-form-grid">
+        <label>
+          <span>Target e1RM (kg)</span>
+          <input type="number" inputMode="decimal" placeholder="e.g. 100" value={target}
+            onChange={(e) => setTarget(e.target.value)} autoFocus />
+        </label>
+        <label>
+          <span>By (optional)</span>
+          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+        </label>
+      </div>
+      <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+        <button className="btn-small" style={{ flex: 1 }} onClick={onCancel}>Cancel</button>
+        <button className="btn-small accent" style={{ flex: 1, opacity: valid ? 1 : 0.4 }}
+          disabled={!valid} onClick={submit}>Save goal</button>
       </div>
     </div>
   )

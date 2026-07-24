@@ -5,7 +5,7 @@ import type { DayTemplate } from '../types'
  * alternates through the pool between sessions and any pick can be swapped
  * for another exercise in its pool (or same primary muscle).
  */
-export const DAYS: DayTemplate[] = [
+export const BUILTIN_DAYS: DayTemplate[] = [
   {
     id: 'push',
     name: 'Push',
@@ -74,4 +74,45 @@ export const DAYS: DayTemplate[] = [
   },
 ]
 
-export const dayById = new Map(DAYS.map((d) => [d.id, d]))
+/** Ids of the built-in split, so custom days can be told apart and protected. */
+export const BUILTIN_DAY_IDS = new Set(BUILTIN_DAYS.map((d) => d.id))
+
+/**
+ * The live split = built-in days plus any user-built ones. Reassigned (not
+ * mutated) by `registerCustomDays`; ES-module live bindings mean every importer
+ * sees the update — the same trick the exercise catalog uses.
+ */
+export let DAYS: DayTemplate[] = [...BUILTIN_DAYS]
+export let dayById = new Map(DAYS.map((d) => [d.id, d]))
+
+/** Merge the user's custom days into the live split (call once on load). */
+export function registerCustomDays(custom: DayTemplate[]): void {
+  const cleaned = custom
+    .filter((d) => !BUILTIN_DAY_IDS.has(d.id))
+    .map((d) => ({ ...d, custom: true as const }))
+  DAYS = [...BUILTIN_DAYS, ...cleaned]
+  dayById = new Map(DAYS.map((d) => [d.id, d]))
+}
+
+export function isCustomDay(id: string): boolean {
+  return !BUILTIN_DAY_IDS.has(id)
+}
+
+/** Build a custom day from a name + slots, deriving its muscle list. */
+export function makeCustomDay(input: {
+  id?: string
+  name: string
+  slots: DayTemplate['slots']
+}): DayTemplate {
+  const muscles: DayTemplate['muscles'] = []
+  for (const slot of input.slots) {
+    if (!muscles.includes(slot.muscle)) muscles.push(slot.muscle)
+  }
+  return {
+    id: input.id ?? `day-${crypto.randomUUID()}`,
+    name: input.name.trim(),
+    muscles,
+    slots: input.slots,
+    custom: true,
+  }
+}

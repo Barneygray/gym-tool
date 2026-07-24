@@ -3,6 +3,7 @@ import type { BodyLog, Session, SetLog, Settings } from '../types'
 import { getExercise, isBodyweightLoaded } from '../data/exercises'
 import { dayById } from '../data/days'
 import { suggestFor } from '../engine/progression'
+import { phaseFor } from '../engine/mesocycle'
 import { warmupRamp } from '../engine/warmup'
 import { platesPerSide } from '../engine/plates'
 import { newPRsInSession } from '../engine/stats'
@@ -39,7 +40,8 @@ export function WorkoutScreen({ active, setActive, history, settings, bodyLog, o
   const bodyweight = useMemo(() => latestBodyweight(bodyLog), [bodyLog])
 
   const exercise = getExercise(active.exerciseIds[active.currentIndex])
-  const suggestion = useMemo(() => suggestFor(exercise, history, settings), [exercise, history, settings])
+  const phase = useMemo(() => phaseFor(settings.meso, active.startedAt), [settings.meso, active.startedAt])
+  const suggestion = useMemo(() => suggestFor(exercise, history, settings, phase), [exercise, history, settings, phase])
   const loggedSets = active.logged[exercise.id] ?? []
 
   const [weight, setWeight] = useState(0)

@@ -47,3 +47,29 @@ export async function notifyRestDone(): Promise<void> {
     // Notification unavailable — the in-app UI still updates on return.
   }
 }
+
+/**
+ * Fire a "time to train" nudge. Unlike the rest alert this is allowed while the
+ * app is foregrounded too — the caller (App) rate-limits it to once per day.
+ */
+export async function notifyTrainingReminder(title: string, body: string): Promise<void> {
+  if (notificationPermission() !== 'granted') return
+  const options: NotificationOptions = {
+    body,
+    tag: 'forge-train-reminder',
+    icon: 'icon-192.png',
+    badge: 'icon-192.png',
+  }
+  try {
+    if ('serviceWorker' in navigator) {
+      const reg = await navigator.serviceWorker.getRegistration()
+      if (reg) {
+        await reg.showNotification(title, options)
+        return
+      }
+    }
+    new Notification(title, options)
+  } catch {
+    // Notification unavailable — the in-app banner still nudges.
+  }
+}

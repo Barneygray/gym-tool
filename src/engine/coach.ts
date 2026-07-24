@@ -1,10 +1,10 @@
-import type { DayType, Muscle, Session } from '../types'
+import type { DayId, Muscle, Session } from '../types'
 import { DAYS } from '../data/days'
 import { recoveryByMuscle } from './stats'
 import { underVolumeMuscles } from './volume'
 
 export interface DayRecommendation {
-  dayType: DayType
+  dayType: DayId
   dayName: string
   headline: string
   reason: string

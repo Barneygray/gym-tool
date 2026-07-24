@@ -2,17 +2,10 @@ import type { Session, Settings } from '../types'
 import { supabase, supabaseConfigured } from './supabaseClient'
 import { getAllSessions, getSettings, applyRemoteSessions, saveSettings } from './db'
 import { planSessionSync, syncStamp } from '../engine/syncPlan'
+import { ownerKey } from './syncKey'
 
 export { supabaseConfigured }
-
-/**
- * Single-user personal app: every device shares one data bucket, keyed by this
- * constant. No accounts, no sign-in — open the app anywhere and it syncs to the
- * same rows automatically. (The Supabase anon key and this owner key are both
- * public in the bundle; protection is the obscurity of the app URL, which is
- * the accepted trade for zero-friction personal backup.)
- */
-const OWNER = 'forge-owner'
+export { getSyncKey, hasPrivateSyncKey, setSyncKey } from './syncKey'
 
 interface SessionRow {
   uuid: string
@@ -50,10 +43,10 @@ function reportSync(error: string | null): void {
   for (const l of errorListeners) l(error)
 }
 
-function rowFor(session: Session) {
+function rowFor(session: Session, owner: string) {
   return {
     uuid: session.uuid,
-    owner: OWNER,
+    owner,
     day_type: session.dayType,
     started_at: session.startedAt,
     finished_at: session.finishedAt ?? null,
@@ -73,11 +66,12 @@ function rowFor(session: Session) {
 export async function runSync(): Promise<void> {
   if (!supabase) return
   try {
+    const owner = await ownerKey()
     const local = await getAllSessions()
     const { data: remoteMeta, error: metaError } = await supabase
       .from('sessions')
       .select('uuid, updated_at')
-      .eq('owner', OWNER)
+      .eq('owner', owner)
     if (metaError) throw new Error(metaError.message)
 
     const { toPush, toPullUuids } = planSessionSync(
@@ -86,7 +80,7 @@ export async function runSync(): Promise<void> {
     )
 
     if (toPush.length > 0) {
-      const { error } = await supabase.from('sessions').upsert(toPush.map(rowFor))
+      const { error } = await supabase.from('sessions').upsert(toPush.map((s) => rowFor(s, owner)))
       if (error) throw new Error(error.message)
     }
 
@@ -105,19 +99,21 @@ export async function runSync(): Promise<void> {
       await applyRemoteSessions(pulled)
     }
 
-    await syncSettings()
+    await syncSettings(owner)
     reportSync(null)
   } catch (e) {
     reportSync(e instanceof Error ? `Cloud sync failed: ${e.message}` : 'Cloud sync failed.')
   }
 }
 
-async function syncSettings(): Promise<void> {
+async function syncSettings(owner: string): Promise<void> {
   if (!supabase) return
-  const { data: remote } = await supabase.from('settings').select('*').eq('owner', OWNER).maybeSingle()
+  const { data: remote } = await supabase.from('settings').select('*').eq('owner', owner).maybeSingle()
   if (remote) {
     const row = remote as SettingsRow
+    const local = await getSettings()
     await saveSettings({
+      ...local,
       id: 'main',
       barWeightKg: row.bar_weight_kg,
       platesKg: row.plates_kg,
@@ -130,8 +126,9 @@ async function syncSettings(): Promise<void> {
 
 export async function pushSettings(settings: Settings): Promise<void> {
   if (!supabase) return
+  const owner = await ownerKey()
   const { error } = await supabase.from('settings').upsert({
-    owner: OWNER,
+    owner,
     bar_weight_kg: settings.barWeightKg,
     plates_kg: settings.platesKg,
     sound_on: settings.soundOn,
@@ -142,6 +139,7 @@ export async function pushSettings(settings: Settings): Promise<void> {
 /** Fire-and-forget push of a single session write (create, edit, or delete). */
 export async function pushSession(session: Session): Promise<void> {
   if (!supabase) return
-  const { error } = await supabase.from('sessions').upsert(rowFor(session))
+  const owner = await ownerKey()
+  const { error } = await supabase.from('sessions').upsert(rowFor(session, owner))
   reportSync(error ? `Couldn't back up your last change: ${error.message}` : null)
 }

@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { BodyLog, DayType, Session, SetLog, Settings } from './types'
-import { DEFAULT_SETTINGS, getBodyLog, getHistory, getSettings, loadCustomExercises } from './db/db'
+import type { BodyLog, DayId, Goal, Session, SetLog, Settings } from './types'
+import {
+  DEFAULT_SETTINGS, getBodyLog, getGoals, getHistory, getSettings, loadCustomDays, loadCustomExercises, saveGoal,
+} from './db/db'
 import { onSyncError, runSync, supabaseConfigured } from './db/sync'
+import { reminderNudge } from './engine/reminder'
+import { newlyAchieved } from './engine/goals'
+import { bodyweightAt } from './engine/bodyweight'
+import { notifyTrainingReminder } from './notify'
 import { BarbellIcon, ChartIcon, GearIcon, HistoryIcon, KettlebellIcon, StretchIcon } from './components/Icons'
 import { TodayScreen } from './screens/Today'
 import { WorkoutScreen } from './screens/Workout'
@@ -14,7 +20,7 @@ import { SettingsScreen } from './screens/Settings'
 export type Tab = 'today' | 'log' | 'stretch' | 'condition' | 'progress' | 'settings'
 
 export interface ActiveWorkout {
-  dayType: DayType
+  dayType: DayId
   startedAt: number
   exerciseIds: string[]
   logged: Record<string, SetLog[]>
@@ -22,6 +28,7 @@ export interface ActiveWorkout {
 }
 
 const ACTIVE_KEY = 'forge-active-workout'
+const REMINDER_KEY = 'forge-reminder-shown' // start-of-day epoch of the last nudge
 
 function loadActive(): ActiveWorkout | null {
   try {
@@ -37,6 +44,7 @@ export default function App() {
   const [history, setHistory] = useState<Session[]>([])
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS)
   const [bodyLog, setBodyLog] = useState<BodyLog[]>([])
+  const [goals, setGoals] = useState<Goal[]>([])
   const [active, setActiveState] = useState<ActiveWorkout | null>(loadActive)
   const [ready, setReady] = useState(false)
   const [syncing, setSyncing] = useState(false)
@@ -44,13 +52,21 @@ export default function App() {
   const refreshRef = useRef<() => Promise<void>>(async () => {})
 
   const refresh = useCallback(async () => {
-    // Register custom exercises before setting state, so any render that looks
-    // up an exercise by id (e.g. a resumed workout) can find custom lifts.
-    await loadCustomExercises()
-    const [h, s, bl] = await Promise.all([getHistory(), getSettings(), getBodyLog()])
+    // Register custom exercises and days before setting state, so any render
+    // that looks up one by id (e.g. a resumed workout) resolves it.
+    await Promise.all([loadCustomExercises(), loadCustomDays()])
+    const [h, s, bl, g] = await Promise.all([getHistory(), getSettings(), getBodyLog(), getGoals()])
+    // Stamp any goal whose target was just met so the win is recorded once.
+    const hit = newlyAchieved(g, h, bodyweightAt(bl))
+    if (hit.length > 0) {
+      const now = Date.now()
+      await Promise.all(hit.map((goal) => saveGoal({ ...goal, achievedAt: now })))
+      for (const goal of hit) goal.achievedAt = now
+    }
     setHistory(h)
     setSettings(s)
     setBodyLog(bl)
+    setGoals(g)
   }, [])
   refreshRef.current = refresh
 
@@ -72,6 +88,26 @@ export default function App() {
   }, [refresh, syncNow])
 
   useEffect(() => onSyncError(setSyncError), [])
+
+  // Fire the daily "time to train" nudge at most once per day, when due. This
+  // runs while the app is open (PWAs can't wake themselves reliably), and also
+  // re-checks when the tab returns to the foreground.
+  useEffect(() => {
+    if (!ready) return
+    const check = () => {
+      const now = Date.now()
+      const nudge = reminderNudge(settings.reminder, history, now)
+      if (!nudge.due) return
+      const today = new Date(now).setHours(0, 0, 0, 0)
+      if (Number(localStorage.getItem(REMINDER_KEY)) === today) return
+      localStorage.setItem(REMINDER_KEY, String(today))
+      void notifyTrainingReminder(nudge.title, nudge.body)
+    }
+    check()
+    const onVisible = () => document.visibilityState === 'visible' && check()
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [ready, settings.reminder, history])
 
   const setActive = useCallback((w: ActiveWorkout | null) => {
     setActiveState(w)
@@ -104,7 +140,7 @@ export default function App() {
             {tab === 'stretch' && <StretchScreen />}
             {tab === 'condition' && <ConditioningScreen history={history} onLogged={refresh} />}
             {tab === 'progress' && (
-              <ProgressScreen history={history} bodyLog={bodyLog} onChanged={refresh} />
+              <ProgressScreen history={history} bodyLog={bodyLog} goals={goals} onChanged={refresh} />
             )}
             {tab === 'settings' && (
               <SettingsScreen

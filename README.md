@@ -17,6 +17,23 @@ tells you exactly what to lift next.
   range; you add reps at a fixed weight until every set tops the range, then the
   app bumps the weight and you rebuild. Logging RPE sharpens the jumps: an easy
   top-of-range session earns a double increment.
+- **Mesocycle periodization** — opt into a training block (Setup → Training block)
+  and the engine stops living session-to-session: accumulation weeks ramp your
+  prescribed set count while the final week auto-schedules a planned deload
+  (reduced load, a set trimmed) so fatigue clears before the next block. The
+  Train screen shows the current week and phase, and the block rolls into a fresh
+  cycle automatically.
+- **Build your own split** — the five built-in days are a starting point, not a
+  cage. Setup → Program lets you create custom days (upper/lower, full-body, a
+  bro split — whatever you run); they appear on Train with the same rotation,
+  progression engine, warm-ups, and stats as the built-ins.
+- **Goals with projections** — set an estimated-1RM target for any lift (Progress
+  → Goals) and Forge fits your e1RM trend to project *when* you'll hit it, flags
+  whether you're on pace against an optional deadline, and celebrates the goal
+  when the number lands.
+- **Time-to-train reminders** — opt into a daily nudge (Setup → Reminders) and,
+  if you haven't trained by your chosen hour, Forge notifies you with the exact
+  day the coach would pick next.
 - **Smart in-workout tools** — warm-up ramps for compounds, per-side plate math,
   auto-starting rest timer with chime/vibration, per-set RPE and notes. The
   timer holds a screen wake lock so the phone won't sleep mid-set, and (opt-in
@@ -90,9 +107,17 @@ One-time setup (already done for the bundled project): create a Supabase
 project, drop its URL + anon key into `src/db/supabaseClient.ts`, and run
 `supabase-schema.sql` once in the SQL Editor. That's the whole backend.
 
-**Privacy trade-off:** the anon key and the `OWNER` key both ship in the app's
-public code, and the backup tables grant the anon role access, so anyone who
+**Privacy trade-off:** by default every install shares one public bucket keyed
+by a constant, and the anon key ships in the app's public code, so anyone who
 found the app's URL and inspected it could read or overwrite the data. For a
 personal training log on an obscure URL that's an accepted trade for
-zero-friction, no-login backup. Keep the repo/site private if you'd rather lock
-it down.
+zero-friction, no-login backup.
+
+**Private sync key (opt-in hardening):** Setup → Cloud Backup lets you set a
+passphrase. When set, your backup is scoped to a bucket derived from
+`forge-<sha256(passphrase)>` — the key is held only in the device's
+`localStorage` and never ships in the bundle, so reaching your rows now requires
+the passphrase, not just the URL. Use the same passphrase on every device to
+share history; changing it re-syncs your local data up under the new bucket. The
+passphrase is device-local (it travels via neither cloud sync nor JSON
+export/import), so set it once per device.
