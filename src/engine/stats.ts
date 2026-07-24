@@ -1,6 +1,22 @@
 import type { Muscle, Session, SetLog } from '../types'
-import { exerciseById } from '../data/exercises'
+import { exerciseById, isBodyweightLoaded } from '../data/exercises'
 import { performancesOf, type Performance } from './history'
+import type { BodyweightAt } from './bodyweight'
+
+/** No-op bodyweight resolver: bodyweight-loaded lifts fall back to added weight. */
+const NO_BW: BodyweightAt = () => 0
+
+/**
+ * Real load of a set: for bodyweight-loaded lifts (pull-ups, dips…) that's
+ * bodyweight-at-the-time plus the added weight; for everything else it's just
+ * the logged weight. With the no-op resolver it equals the logged weight, so
+ * callers that don't care about bodyweight keep the original behaviour.
+ */
+export function effectiveLoad(exerciseId: string, set: SetLog, at: number, bwAt: BodyweightAt = NO_BW): number {
+  const ex = exerciseById.get(exerciseId)
+  if (ex && isBodyweightLoaded(ex)) return bwAt(at) + set.weight
+  return set.weight
+}
 
 /** Epley estimated one-rep max. */
 export function e1rm(weight: number, reps: number): number {
@@ -19,9 +35,12 @@ export interface E1rmPoint {
 }
 
 /** e1RM trend for an exercise, oldest first. */
-export function e1rmTrend(exerciseId: string, history: Session[]): E1rmPoint[] {
+export function e1rmTrend(exerciseId: string, history: Session[], bwAt: BodyweightAt = NO_BW): E1rmPoint[] {
   return performancesOf(exerciseId, history)
-    .map((p) => ({ date: p.startedAt, e1rm: bestSetE1rm(p.sets) }))
+    .map((p) => ({
+      date: p.startedAt,
+      e1rm: Math.max(0, ...p.sets.map((s) => e1rm(effectiveLoad(exerciseId, s, p.startedAt, bwAt), s.reps))),
+    }))
     .filter((p) => p.e1rm > 0)
     .reverse()
 }
@@ -31,19 +50,21 @@ export interface ExercisePRs {
   bestE1rm: { value: number; weight: number; reps: number; date: number } | null
 }
 
-export function prsFor(exerciseId: string, history: Session[]): ExercisePRs {
+export function prsFor(exerciseId: string, history: Session[], bwAt: BodyweightAt = NO_BW): ExercisePRs {
   let maxWeight: ExercisePRs['maxWeight'] = null
   let bestE1rm: ExercisePRs['bestE1rm'] = null
   for (const p of performancesOf(exerciseId, history)) {
     for (const s of p.sets) {
-      if (s.weight <= 0 || s.reps <= 0) continue
-      if (!maxWeight || s.weight > maxWeight.weight ||
-        (s.weight === maxWeight.weight && s.reps > maxWeight.reps)) {
-        maxWeight = { weight: s.weight, reps: s.reps, date: p.startedAt }
+      if (s.reps <= 0) continue
+      const load = effectiveLoad(exerciseId, s, p.startedAt, bwAt)
+      if (load <= 0) continue
+      if (!maxWeight || load > maxWeight.weight ||
+        (load === maxWeight.weight && s.reps > maxWeight.reps)) {
+        maxWeight = { weight: load, reps: s.reps, date: p.startedAt }
       }
-      const est = e1rm(s.weight, s.reps)
+      const est = e1rm(load, s.reps)
       if (!bestE1rm || est > bestE1rm.value) {
-        bestE1rm = { value: est, weight: s.weight, reps: s.reps, date: p.startedAt }
+        bestE1rm = { value: est, weight: load, reps: s.reps, date: p.startedAt }
       }
     }
   }
@@ -51,7 +72,7 @@ export function prsFor(exerciseId: string, history: Session[]): ExercisePRs {
 }
 
 /** PRs achieved by `session` relative to everything logged before it. */
-export function newPRsInSession(session: Session, history: Session[]): {
+export function newPRsInSession(session: Session, history: Session[], bwAt: BodyweightAt = NO_BW): {
   exerciseId: string
   kind: 'weight' | 'e1rm'
   weight: number
@@ -60,34 +81,39 @@ export function newPRsInSession(session: Session, history: Session[]): {
   const before = history.filter((s) => s.startedAt < session.startedAt)
   const out: { exerciseId: string; kind: 'weight' | 'e1rm'; weight: number; reps: number }[] = []
   for (const entry of session.entries) {
-    const prior = prsFor(entry.exerciseId, before)
-    let bestNewWeight: SetLog | null = null
-    let bestNewE1rm: SetLog | null = null
+    const prior = prsFor(entry.exerciseId, before, bwAt)
+    let bestNewWeight: { load: number; reps: number } | null = null
+    let bestNewE1rm: { load: number; reps: number } | null = null
     for (const s of entry.sets) {
-      if (s.weight <= 0 || s.reps <= 0) continue
-      if (s.weight > (prior.maxWeight?.weight ?? 0) &&
-        s.weight > (bestNewWeight?.weight ?? 0)) bestNewWeight = s
-      if (e1rm(s.weight, s.reps) > (prior.bestE1rm?.value ?? 0) &&
-        e1rm(s.weight, s.reps) > (bestNewE1rm ? e1rm(bestNewE1rm.weight, bestNewE1rm.reps) : 0)) bestNewE1rm = s
+      if (s.reps <= 0) continue
+      const load = effectiveLoad(entry.exerciseId, s, session.startedAt, bwAt)
+      if (load <= 0) continue
+      if (load > (prior.maxWeight?.weight ?? 0) && load > (bestNewWeight?.load ?? 0)) {
+        bestNewWeight = { load, reps: s.reps }
+      }
+      const est = e1rm(load, s.reps)
+      if (est > (prior.bestE1rm?.value ?? 0) && est > (bestNewE1rm ? e1rm(bestNewE1rm.load, bestNewE1rm.reps) : 0)) {
+        bestNewE1rm = { load, reps: s.reps }
+      }
     }
     if (bestNewWeight) {
-      out.push({ exerciseId: entry.exerciseId, kind: 'weight', weight: bestNewWeight.weight, reps: bestNewWeight.reps })
+      out.push({ exerciseId: entry.exerciseId, kind: 'weight', weight: bestNewWeight.load, reps: bestNewWeight.reps })
     } else if (bestNewE1rm) {
-      out.push({ exerciseId: entry.exerciseId, kind: 'e1rm', weight: bestNewE1rm.weight, reps: bestNewE1rm.reps })
+      out.push({ exerciseId: entry.exerciseId, kind: 'e1rm', weight: bestNewE1rm.load, reps: bestNewE1rm.reps })
     }
   }
   return out
 }
 
 /** Tonnage (weight × reps) per muscle for sessions in [from, to). Secondary muscles count half. */
-export function volumeByMuscle(history: Session[], from: number, to: number): Map<Muscle, number> {
+export function volumeByMuscle(history: Session[], from: number, to: number, bwAt: BodyweightAt = NO_BW): Map<Muscle, number> {
   const vol = new Map<Muscle, number>()
   for (const session of history) {
     if (session.startedAt < from || session.startedAt >= to) continue
     for (const entry of session.entries) {
       const exercise = exerciseById.get(entry.exerciseId)
       if (!exercise) continue
-      const tonnage = entry.sets.reduce((t, s) => t + s.weight * s.reps, 0)
+      const tonnage = entry.sets.reduce((t, s) => t + effectiveLoad(entry.exerciseId, s, session.startedAt, bwAt) * s.reps, 0)
       vol.set(exercise.primary, (vol.get(exercise.primary) ?? 0) + tonnage)
       for (const m of exercise.secondary) {
         vol.set(m, (vol.get(m) ?? 0) + tonnage * 0.5)

@@ -8,13 +8,20 @@ tells you exactly what to lift next.
 - **Five gym days** — Push, Pull, Legs, Shoulders & Arms, Chest & Back — each
   with a curated pool of 2–3 exercises per muscle group. Variations rotate
   automatically between sessions for a varied growth stimulus, and any pick can
-  be swapped for a like exercise.
+  be swapped for a like exercise, added, or dropped before you start.
+- **Custom exercises** — add the machines and variations your gym actually has
+  (Setup → Exercises). Custom lifts are first-class: they show up as swap and
+  add options and get the same progression engine, warm-ups, e1RM trend, and PR
+  tracking as the built-ins.
 - **Progressive overload engine (double progression)** — each exercise has a rep
   range; you add reps at a fixed weight until every set tops the range, then the
   app bumps the weight and you rebuild. Logging RPE sharpens the jumps: an easy
   top-of-range session earns a double increment.
 - **Smart in-workout tools** — warm-up ramps for compounds, per-side plate math,
-  auto-starting rest timer with chime/vibration, per-set RPE and notes.
+  auto-starting rest timer with chime/vibration, per-set RPE and notes. The
+  timer holds a screen wake lock so the phone won't sleep mid-set, and (opt-in
+  in Setup) fires a notification when rest is up even if the app is backgrounded
+  or the screen is off.
 - **Stall detection** — three sessions without progress on a lift triggers a
   deload-and-rebuild suggestion (or swap to a sibling variation).
 - **Muscle freshness + a coach** — the home screen shows days-since-trained per
@@ -26,12 +33,23 @@ tells you exactly what to lift next.
   permanently skews your PRs, e1RM trends, or next suggestion.
 - **Progress** — estimated 1RM trends (Epley), weekly tonnage per muscle group,
   consistency, and PR tracking with in-session PR celebrations.
+- **Weekly volume targets** — Progress shows hard sets per muscle for the last 7
+  days against each muscle's effective range (MEV–MRV landmarks), colour-coded
+  below/in/over range, and the home-screen coach flags muscles you've trained
+  but under-dosed this week.
+- **Bodyweight tracking** — log your bodyweight (Progress) to see the trend and,
+  crucially, to get *accurate* numbers for bodyweight lifts: pull-ups, dips, and
+  other bodyweight-loaded moves fold bodyweight-at-the-time into their e1RM, PRs,
+  and tonnage instead of counting only the added plate.
 - **Stretch tab** — key holds per muscle group, plus a *Desk Rescue* section for
   lower back, tech neck, and hips.
 - **Condition tab** — kettlebell, plyometric, and core/spinal-health movements,
   loggable so frequency is tracked.
 - **Your data, yours** — everything lives on-device (IndexedDB); one-tap JSON
-  export/import in Settings.
+  export/import in Settings carries sessions, settings, custom exercises, and
+  bodyweight. (Custom exercises and the bodyweight log are device-local and
+  travel via export/import; sessions and settings also get zero-setup cloud
+  backup below.)
 - **Zero-setup cloud backup** — sessions also sync to a Supabase table
   automatically, with no sign-in. Every device that opens the app shares one
   data bucket, so a lost or replaced phone gets its full history back the moment
