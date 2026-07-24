@@ -8,9 +8,10 @@ interface SettingsProps {
   onChanged: () => Promise<void>
   syncing: boolean
   onSyncNow: () => Promise<void>
+  syncError: string | null
 }
 
-export function SettingsScreen({ settings, onChanged, syncing, onSyncNow }: SettingsProps) {
+export function SettingsScreen({ settings, onChanged, syncing, onSyncNow, syncError }: SettingsProps) {
   const [platesText, setPlatesText] = useState(settings.platesKg.join(', '))
   const [status, setStatus] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -115,13 +116,20 @@ export function SettingsScreen({ settings, onChanged, syncing, onSyncNow }: Sett
           <div className="card">
             <div className="settings-row">
               <div>
-                <div className="k">{syncing ? 'Syncing…' : 'Cloud sync on ✓'}</div>
-                <div className="sub">Every session saves to the cloud automatically. Open the app on any device to get your full history back.</div>
+                <div className="k">
+                  {syncing ? 'Syncing…' : syncError ? 'Backup problem' : 'Cloud sync on ✓'}
+                </div>
+                <div className="sub">Every session — including edits and deletions — saves to the cloud automatically. Open the app on any device to get your full history back.</div>
               </div>
               <button className="btn-small" onClick={() => onSyncNow()} disabled={syncing}>
                 {syncing ? '…' : 'Sync now'}
               </button>
             </div>
+            {syncError && !syncing && (
+              <div className="sub" style={{ color: '#ff5d5d', marginTop: 4 }}>
+                {syncError} We’ll retry on the next change or sync.
+              </div>
+            )}
           </div>
         </>
       )}

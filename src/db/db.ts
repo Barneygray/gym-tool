@@ -44,29 +44,60 @@ export async function saveSettings(s: Settings): Promise<void> {
   await db.settings.put(s)
 }
 
-/** All finished sessions, newest first. */
+/** All finished, non-deleted sessions, newest first. */
 export async function getHistory(): Promise<Session[]> {
   const all = await db.sessions.orderBy('startedAt').reverse().toArray()
-  return all.filter((s) => s.finishedAt !== undefined)
+  return all.filter((s) => s.finishedAt !== undefined && s.deletedAt === undefined)
 }
 
 export async function saveSession(session: Session): Promise<number> {
   const withUuid = session.uuid ? session : { ...session, uuid: crypto.randomUUID() }
-  return db.sessions.put(withUuid)
+  return db.sessions.put({ ...withUuid, updatedAt: Date.now() })
 }
 
-/** Every locally stored session, including any never finished. */
+/**
+ * Persist edits to an existing session as given. The caller stamps `updatedAt`
+ * so the exact same value can be pushed to the cloud — keeping local and remote
+ * write times identical and avoiding a spurious re-push on the next sync.
+ */
+export async function updateSession(session: Session): Promise<number> {
+  return db.sessions.put(session)
+}
+
+/**
+ * Soft-delete by uuid: write a tombstone rather than dropping the row, so the
+ * deletion propagates to the cloud and other devices instead of resurrecting.
+ * Returns the tombstoned session so the caller can push the same stamp.
+ */
+export async function deleteSession(uuid: string): Promise<Session | undefined> {
+  const now = Date.now()
+  const existing = await db.sessions.where('uuid').equals(uuid).first()
+  if (!existing) return undefined
+  const tombstoned: Session = { ...existing, deletedAt: now, updatedAt: now }
+  await db.sessions.put(tombstoned)
+  return tombstoned
+}
+
+/** Every locally stored session, including tombstones — used by sync. */
 export async function getAllSessions(): Promise<Session[]> {
   return db.sessions.toArray()
 }
 
-/** Insert sessions pulled from the cloud that aren't present locally yet (matched by uuid). */
-export async function mergeRemoteSessions(remote: Session[]): Promise<void> {
+/**
+ * Apply sessions pulled from the cloud, overwriting the local copy by uuid.
+ * Handles new sessions, edits, and tombstones alike — the caller only passes
+ * rows the sync planner judged newer than what's local.
+ */
+export async function applyRemoteSessions(remote: Session[]): Promise<void> {
   if (remote.length === 0) return
   await db.transaction('rw', db.sessions, async () => {
-    const existing = new Set((await db.sessions.toArray()).map((s) => s.uuid))
-    const toAdd = remote.filter((s) => !existing.has(s.uuid)).map(({ id: _id, ...rest }) => rest as Session)
-    if (toAdd.length > 0) await db.sessions.bulkAdd(toAdd)
+    const idByUuid = new Map((await db.sessions.toArray()).map((s) => [s.uuid, s.id]))
+    for (const r of remote) {
+      const { id: _id, ...rest } = r
+      const existingId = idByUuid.get(r.uuid)
+      if (existingId !== undefined) await db.sessions.put({ ...rest, id: existingId })
+      else await db.sessions.add(rest as Session)
+    }
   })
 }
 

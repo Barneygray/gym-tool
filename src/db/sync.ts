@@ -1,7 +1,7 @@
 import type { Session, Settings } from '../types'
 import { supabase, supabaseConfigured } from './supabaseClient'
-import { getAllSessions, getSettings, mergeRemoteSessions, saveSettings } from './db'
-import { planSessionSync } from '../engine/syncPlan'
+import { getAllSessions, getSettings, applyRemoteSessions, saveSettings } from './db'
+import { planSessionSync, syncStamp } from '../engine/syncPlan'
 
 export { supabaseConfigured }
 
@@ -20,6 +20,8 @@ interface SessionRow {
   started_at: number
   finished_at: number | null
   entries: Session['entries']
+  updated_at: number | null
+  deleted_at: number | null
 }
 
 interface SettingsRow {
@@ -28,47 +30,85 @@ interface SettingsRow {
   sound_on: boolean
 }
 
+// ── Sync error surface ──────────────────────────────────
+// Background pushes are fire-and-forget, so failures would otherwise vanish.
+// Anything that talks to the cloud reports its outcome here; the UI subscribes.
+type ErrorListener = (message: string | null) => void
+let errorListeners: ErrorListener[] = []
+let lastSyncError: string | null = null
+
+export function onSyncError(cb: ErrorListener): () => void {
+  errorListeners.push(cb)
+  cb(lastSyncError)
+  return () => {
+    errorListeners = errorListeners.filter((l) => l !== cb)
+  }
+}
+
+function reportSync(error: string | null): void {
+  lastSyncError = error
+  for (const l of errorListeners) l(error)
+}
+
+function rowFor(session: Session) {
+  return {
+    uuid: session.uuid,
+    owner: OWNER,
+    day_type: session.dayType,
+    started_at: session.startedAt,
+    finished_at: session.finishedAt ?? null,
+    entries: session.entries,
+    updated_at: syncStamp(session),
+    deleted_at: session.deletedAt ?? null,
+  }
+}
+
 /**
- * Two-way reconciliation: push any local session the cloud lacks, pull any
- * cloud session missing locally, then sync settings. Safe to call repeatedly —
- * every step is additive or idempotent. Fails silently when offline; the next
- * sync (on the next app open) reconciles whatever was missed.
+ * Two-way reconciliation keyed on write time: push any local session the cloud
+ * is missing or has an older copy of, pull anything newer remotely, then sync
+ * settings. Edits and deletions (tombstones) ride the same path — a change is
+ * just a newer write. Offline/transient errors are surfaced to the UI and
+ * reconciled on the next sync rather than thrown.
  */
 export async function runSync(): Promise<void> {
   if (!supabase) return
   try {
     const local = await getAllSessions()
-    const { data: remoteMeta, error } = await supabase.from('sessions').select('uuid').eq('owner', OWNER)
-    if (error) return
-    const { toPush, toPullUuids } = planSessionSync(local, (remoteMeta ?? []).map((r) => r.uuid as string))
+    const { data: remoteMeta, error: metaError } = await supabase
+      .from('sessions')
+      .select('uuid, updated_at')
+      .eq('owner', OWNER)
+    if (metaError) throw new Error(metaError.message)
+
+    const { toPush, toPullUuids } = planSessionSync(
+      local,
+      (remoteMeta ?? []).map((r) => ({ uuid: r.uuid as string, updatedAt: (r.updated_at as number) ?? 0 })),
+    )
 
     if (toPush.length > 0) {
-      const rows = toPush.map((s) => ({
-        uuid: s.uuid,
-        owner: OWNER,
-        day_type: s.dayType,
-        started_at: s.startedAt,
-        finished_at: s.finishedAt ?? null,
-        entries: s.entries,
-      }))
-      await supabase.from('sessions').upsert(rows)
+      const { error } = await supabase.from('sessions').upsert(toPush.map(rowFor))
+      if (error) throw new Error(error.message)
     }
 
     if (toPullUuids.length > 0) {
-      const { data: remoteRows } = await supabase.from('sessions').select('*').in('uuid', toPullUuids)
+      const { data: remoteRows, error } = await supabase.from('sessions').select('*').in('uuid', toPullUuids)
+      if (error) throw new Error(error.message)
       const pulled: Session[] = (remoteRows ?? []).map((r: SessionRow) => ({
         uuid: r.uuid,
         dayType: r.day_type as Session['dayType'],
         startedAt: r.started_at,
         finishedAt: r.finished_at ?? undefined,
         entries: r.entries,
+        updatedAt: r.updated_at ?? undefined,
+        deletedAt: r.deleted_at ?? undefined,
       }))
-      await mergeRemoteSessions(pulled)
+      await applyRemoteSessions(pulled)
     }
 
     await syncSettings()
-  } catch {
-    // Offline or transient network error — the next sync catches up.
+    reportSync(null)
+  } catch (e) {
+    reportSync(e instanceof Error ? `Cloud sync failed: ${e.message}` : 'Cloud sync failed.')
   }
 }
 
@@ -90,30 +130,18 @@ async function syncSettings(): Promise<void> {
 
 export async function pushSettings(settings: Settings): Promise<void> {
   if (!supabase) return
-  try {
-    await supabase.from('settings').upsert({
-      owner: OWNER,
-      bar_weight_kg: settings.barWeightKg,
-      plates_kg: settings.platesKg,
-      sound_on: settings.soundOn,
-    })
-  } catch {
-    // Offline — reconciled on the next full sync.
-  }
+  const { error } = await supabase.from('settings').upsert({
+    owner: OWNER,
+    bar_weight_kg: settings.barWeightKg,
+    plates_kg: settings.platesKg,
+    sound_on: settings.soundOn,
+  })
+  reportSync(error ? `Couldn't back up settings: ${error.message}` : null)
 }
 
+/** Fire-and-forget push of a single session write (create, edit, or delete). */
 export async function pushSession(session: Session): Promise<void> {
   if (!supabase) return
-  try {
-    await supabase.from('sessions').upsert({
-      uuid: session.uuid,
-      owner: OWNER,
-      day_type: session.dayType,
-      started_at: session.startedAt,
-      finished_at: session.finishedAt ?? null,
-      entries: session.entries,
-    })
-  } catch {
-    // Offline — this session is still saved locally and pushed on the next sync.
-  }
+  const { error } = await supabase.from('sessions').upsert(rowFor(session))
+  reportSync(error ? `Couldn't back up your last change: ${error.message}` : null)
 }

@@ -12,7 +12,10 @@ create table sessions (
   started_at bigint not null,
   finished_at bigint,
   entries jsonb not null,
-  updated_at timestamptz not null default now()
+  -- Client write time (ms epoch) — drives last-write-wins sync of edits.
+  updated_at bigint,
+  -- Soft-delete tombstone (ms epoch); non-null rows are hidden client-side.
+  deleted_at bigint
 );
 
 create table settings (

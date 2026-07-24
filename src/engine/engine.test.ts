@@ -9,7 +9,8 @@ import { generateWorkout, swapOptions } from './rotation'
 import { platesPerSide, roundToLoadable } from './plates'
 import { warmupRamp } from './warmup'
 import { e1rm, newPRsInSession, recoveryByMuscle, volumeByMuscle } from './stats'
-import { planSessionSync } from './syncPlan'
+import { planSessionSync, syncStamp, type RemoteMeta } from './syncPlan'
+import { recommendDay } from './coach'
 
 const DAY = 86_400_000
 const NOW = Date.UTC(2026, 6, 22)
@@ -185,22 +186,68 @@ describe('stats', () => {
 describe('cloud sync planning', () => {
   const a = session('push', 'bench-press', [{ weight: 80, reps: 6 }])
   const b = session('pull', 'barbell-row', [{ weight: 60, reps: 8 }])
+  const meta = (...s: Session[]): RemoteMeta[] => s.map((x) => ({ uuid: x.uuid, updatedAt: syncStamp(x) }))
 
   it('pushes local sessions the cloud does not have yet', () => {
-    const { toPush, toPullUuids } = planSessionSync([a, b], [a.uuid])
+    const { toPush, toPullUuids } = planSessionSync([a, b], meta(a))
     expect(toPush).toEqual([b])
     expect(toPullUuids).toEqual([])
   })
 
   it('pulls cloud sessions missing locally', () => {
-    const { toPush, toPullUuids } = planSessionSync([a], [a.uuid, b.uuid])
+    const { toPush, toPullUuids } = planSessionSync([a], meta(a, b))
     expect(toPush).toEqual([])
     expect(toPullUuids).toEqual([b.uuid])
   })
 
   it('is a no-op once both sides match', () => {
-    const { toPush, toPullUuids } = planSessionSync([a, b], [a.uuid, b.uuid])
+    const { toPush, toPullUuids } = planSessionSync([a, b], meta(a, b))
     expect(toPush).toEqual([])
     expect(toPullUuids).toEqual([])
+  })
+
+  it('pushes a locally edited session the cloud has an older copy of', () => {
+    const edited: Session = { ...a, entries: [{ exerciseId: 'bench-press', sets: [{ weight: 85, reps: 6 }] }], updatedAt: syncStamp(a) + 10_000 }
+    const { toPush, toPullUuids } = planSessionSync([edited, b], meta(a, b))
+    expect(toPush).toEqual([edited])
+    expect(toPullUuids).toEqual([])
+  })
+
+  it('pulls a remotely edited session that is newer than local', () => {
+    const remote: RemoteMeta[] = [{ uuid: a.uuid, updatedAt: syncStamp(a) + 10_000 }, ...meta(b)]
+    const { toPush, toPullUuids } = planSessionSync([a, b], remote)
+    expect(toPush).toEqual([])
+    expect(toPullUuids).toEqual([a.uuid])
+  })
+
+  it('pushes a local deletion (tombstone) as a newer write', () => {
+    const tombstone: Session = { ...a, deletedAt: syncStamp(a) + 5_000, updatedAt: syncStamp(a) + 5_000 }
+    const { toPush } = planSessionSync([tombstone], meta(a))
+    expect(toPush).toEqual([tombstone])
+  })
+})
+
+describe('coach recommendation', () => {
+  it('recommends a clean start with no history', () => {
+    const rec = recommendDay([], NOW)
+    expect(rec.dayType).toBeDefined()
+    expect(rec.reason).toMatch(/fresh/i)
+    expect(rec.overdue).toEqual([])
+  })
+
+  it('steers toward the day whose muscles are most rested', () => {
+    // Trained chest/back/arms/delts today; every leg muscle untouched → legs wins.
+    const history = [
+      session('push', 'bench-press', [{ weight: 80, reps: 6 }], NOW - 12 * 3600_000),
+      session('pull', 'barbell-row', [{ weight: 60, reps: 8 }], NOW - 12 * 3600_000),
+    ]
+    const rec = recommendDay(history, NOW)
+    expect(rec.dayType).toBe('legs')
+  })
+
+  it('flags muscles gone stale for a week', () => {
+    const history = [session('push', 'bench-press', [{ weight: 80, reps: 6 }], NOW - 9 * DAY)]
+    const rec = recommendDay(history, NOW)
+    expect(rec.overdue).toContain('chest')
   })
 })

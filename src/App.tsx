@@ -1,16 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { DayType, Session, SetLog, Settings } from './types'
 import { DEFAULT_SETTINGS, getHistory, getSettings } from './db/db'
-import { runSync, supabaseConfigured } from './db/sync'
-import { BarbellIcon, ChartIcon, GearIcon, KettlebellIcon, StretchIcon } from './components/Icons'
+import { onSyncError, runSync, supabaseConfigured } from './db/sync'
+import { BarbellIcon, ChartIcon, GearIcon, HistoryIcon, KettlebellIcon, StretchIcon } from './components/Icons'
 import { TodayScreen } from './screens/Today'
 import { WorkoutScreen } from './screens/Workout'
+import { LogScreen } from './screens/Log'
 import { StretchScreen } from './screens/Stretch'
 import { ConditioningScreen } from './screens/Conditioning'
 import { ProgressScreen } from './screens/Progress'
 import { SettingsScreen } from './screens/Settings'
 
-export type Tab = 'today' | 'stretch' | 'condition' | 'progress' | 'settings'
+export type Tab = 'today' | 'log' | 'stretch' | 'condition' | 'progress' | 'settings'
 
 export interface ActiveWorkout {
   dayType: DayType
@@ -38,6 +39,7 @@ export default function App() {
   const [active, setActiveState] = useState<ActiveWorkout | null>(loadActive)
   const [ready, setReady] = useState(false)
   const [syncing, setSyncing] = useState(false)
+  const [syncError, setSyncError] = useState<string | null>(null)
   const refreshRef = useRef<() => Promise<void>>(async () => {})
 
   const refresh = useCallback(async () => {
@@ -63,6 +65,8 @@ export default function App() {
       .then(() => setReady(true))
       .then(() => syncNow())
   }, [refresh, syncNow])
+
+  useEffect(() => onSyncError(setSyncError), [])
 
   const setActive = useCallback((w: ActiveWorkout | null) => {
     setActiveState(w)
@@ -90,6 +94,7 @@ export default function App() {
             {tab === 'today' && (
               <TodayScreen history={history} settings={settings} startWorkout={setActive} />
             )}
+            {tab === 'log' && <LogScreen history={history} onChanged={refresh} />}
             {tab === 'stretch' && <StretchScreen />}
             {tab === 'condition' && <ConditioningScreen history={history} onLogged={refresh} />}
             {tab === 'progress' && <ProgressScreen history={history} />}
@@ -99,6 +104,7 @@ export default function App() {
                 onChanged={refresh}
                 syncing={syncing}
                 onSyncNow={syncNow}
+                syncError={syncError}
               />
             )}
           </>
@@ -108,6 +114,7 @@ export default function App() {
       {!inWorkout && (
         <nav className="tabbar">
           <TabButton id="today" label="Train" current={tab} onSelect={setTab}><BarbellIcon /></TabButton>
+          <TabButton id="log" label="Log" current={tab} onSelect={setTab}><HistoryIcon /></TabButton>
           <TabButton id="stretch" label="Stretch" current={tab} onSelect={setTab}><StretchIcon /></TabButton>
           <TabButton id="condition" label="Condition" current={tab} onSelect={setTab}><KettlebellIcon /></TabButton>
           <TabButton id="progress" label="Progress" current={tab} onSelect={setTab}><ChartIcon /></TabButton>
