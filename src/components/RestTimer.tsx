@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { notifyRestDone } from '../notify'
 
 interface RestTimerProps {
   /** Unix ms when the rest period started; changes retrigger the timer. */
@@ -27,6 +28,7 @@ export function RestTimer({ startedAt, durationSec, soundOn, onDismiss }: RestTi
       beeped.current = true
       if (soundOn) beep()
       if (navigator.vibrate) navigator.vibrate([180, 90, 180])
+      void notifyRestDone()
     }
   }, [done, soundOn])
 
