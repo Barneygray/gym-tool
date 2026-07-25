@@ -23,15 +23,15 @@ function dayName(dayType: Session['dayType']): string {
 }
 
 /**
- * "24 Jul · 5 exercises · 16 sets" for a gym session, but mobility logs no sets
- * at all — it used to read "0 exercises · 0 sets", which describes a session
- * that didn't happen.
+ * The row's detail line, minus the date — the date is its own left-hand column
+ * in the ledger now. Mobility logs no sets at all, so it doesn't get a set
+ * count: it used to read "0 exercises · 0 sets", describing a session that
+ * never happened.
  */
 function sessionMeta(session: Session, sets: number): string {
-  const when = fmtDate(session.startedAt)
   const n = session.entries.length
-  if (sets === 0) return n > 0 ? `${when} · ${plural(n, 'movement')}` : when
-  return `${when} · ${plural(n, 'exercise')} · ${plural(sets, 'set')}`
+  if (sets === 0) return n > 0 ? plural(n, 'movement') : 'Logged'
+  return `${plural(n, 'exercise')} · ${plural(sets, 'set')}`
 }
 
 function plural(n: number, word: string): string {
@@ -78,7 +78,9 @@ export function LogScreen({ history, onChanged }: LogProps) {
   if (history.length === 0) {
     return (
       <>
-        <h1 className="screen-title">Log</h1>
+        <div className="screen-head">
+          <h1 className="screen-title">Log</h1>
+        </div>
         <div className="empty-state">
           <div className="big" aria-hidden="true"><BookIcon /></div>
           No sessions yet. Every workout you finish shows up here — tap one to
@@ -92,18 +94,23 @@ export function LogScreen({ history, onChanged }: LogProps) {
 
   return (
     <>
-      <h1 className="screen-title">Log</h1>
-      <p className="screen-sub">Every session you’ve logged — tap to review, edit, or delete.</p>
+      <div className="screen-head">
+        <h1 className="screen-title">Log</h1>
+        <span className="micro">{plural(history.length, 'session')}</span>
+      </div>
 
       {sorted.map((s) => {
         const { sets, tonnage } = sessionStats(s)
         return (
           <button key={s.uuid} className="day-card log-card" onClick={() => setOpenUuid(s.uuid)}>
+            {/* Date is its own key column, so dates line up down the page
+                instead of being buried mid-sentence in the detail line. */}
+            <span className="rowkey">{fmtDate(s.startedAt)}</span>
             <div>
               <h3>{dayName(s.dayType)}</h3>
               <div className="meta">{sessionMeta(s, sets)}</div>
             </div>
-            <div className={`log-ton num${tonnage <= 0 ? ' none' : ''}`}>
+            <div className={`log-ton${tonnage <= 0 ? ' none' : ''}`}>
               {tonnage <= 0 ? '—' : <>{formatTonnage(tonnage)}<span>{tonnage >= 10000 ? 't' : 'kg'}</span></>}
             </div>
           </button>
@@ -383,7 +390,7 @@ function SessionDetail({ session, onClose, onChanged }: {
 
 function fmtDate(ts: number): string {
   const d = new Date(ts)
-  return `${d.getDate()} ${d.toLocaleString('en', { month: 'short' })}`
+  return `${String(d.getDate()).padStart(2, '0')} ${d.toLocaleString('en', { month: 'short' })}`
 }
 
 function fmtDateLong(ts: number): string {

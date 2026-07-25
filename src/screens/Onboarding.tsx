@@ -140,7 +140,7 @@ export function Onboarding({ onDone }: { onDone: () => Promise<void> }) {
               <input value={platesText} onChange={(e) => setPlatesText(e.target.value)} />
             </label>
             <p className="ob-hint">
-              Train somewhere else too? Setup → Equipment holds a profile per gym.
+              Train somewhere else too? Setup holds a profile per gym.
             </p>
           </>
         )}

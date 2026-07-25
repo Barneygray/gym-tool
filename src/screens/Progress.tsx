@@ -44,7 +44,9 @@ export function ProgressScreen({ history, bodyLog, goals, onChanged }: {
   if (history.length === 0 && bodyLog.length === 0) {
     return (
       <>
-        <h1 className="screen-title">Progress</h1>
+        <div className="screen-head">
+          <h1 className="screen-title">Progress</h1>
+        </div>
         <div className="empty-state">
           <div className="big" aria-hidden="true"><SparkIcon /></div>
           Nothing logged yet. Finish your first session and the trend lines
@@ -61,8 +63,10 @@ export function ProgressScreen({ history, bodyLog, goals, onChanged }: {
 
   return (
     <>
-      <h1 className="screen-title">Progress</h1>
-      <p className="screen-sub">The proof the plan is working.</p>
+      <div className="screen-head">
+        <h1 className="screen-title">Progress</h1>
+        <span className="micro">{trained.length} lifts tracked</span>
+      </div>
 
       {exerciseId && (
         <>
@@ -111,7 +115,7 @@ export function ProgressScreen({ history, bodyLog, goals, onChanged }: {
             Best load in each rep band — a heavy triple and a set of fifteen aren’t
             the same achievement, so they don’t compete.
           </p>
-          <div className="card">
+          <div className="card pane">
             {/* Five columns of numbers next to a lift name overflows 390px;
                 the table scrolls inside its card instead of squeezing. */}
             <div className="pr-table-wrap">
@@ -217,7 +221,7 @@ function GoalsCard({ goals, history, bwAt, now, onChanged }: {
   return (
     <>
       <div className="section-label">Goals</div>
-      <div className="card">
+      <div className="card pane">
         {goals.length === 0 && !adding && (
           <p className="sub" style={{ marginBottom: 'var(--s3)' }}>
             Set an estimated-1RM target and Forge projects when you’ll hit it from your trend.

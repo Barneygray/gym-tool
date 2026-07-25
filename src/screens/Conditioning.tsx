@@ -69,10 +69,10 @@ export function ConditioningScreen({ history, onLogged }: ConditioningProps) {
 
   return (
     <>
-      <h1 className="screen-title">Condition</h1>
-      <p className="screen-sub">
-        Explosive strength and a bulletproof trunk — the base your lifts stand on.
-      </p>
+      <div className="screen-head">
+        <h1 className="screen-title">Condition</h1>
+        <span className="micro">{moves.length} movements</span>
+      </div>
 
       <div className="seg" role="radiogroup" aria-label="Filter movements">
         {(['all', 'power', 'core', 'spine'] as Filter[]).map((f) => (
@@ -83,7 +83,7 @@ export function ConditioningScreen({ history, onLogged }: ConditioningProps) {
         ))}
       </div>
 
-      <div className="card" style={{ paddingTop: 'var(--s1)', paddingBottom: 'var(--s1)' }}>
+      <div className="card pane">
         {moves.map((m) => {
           const since = daysSince(lastDone.get(m.id), now)
           const isOn = selected.has(m.id)

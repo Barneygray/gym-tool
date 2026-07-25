@@ -29,6 +29,9 @@ const MUSCLE_LABEL: Record<Muscle, string> = {
 const WEEKDAY_LETTER = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
 const WEEKDAY_FULL = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
+const fmtToday = (now: number) =>
+  new Date(now).toLocaleDateString('en', { weekday: 'long', day: 'numeric', month: 'long' })
+
 interface TodayProps {
   history: Session[]
   settings: Settings
@@ -58,18 +61,17 @@ export function TodayScreen({ history, settings, bodyLog, startWorkout, onChange
 
   return (
     <>
-      <h1 className="screen-title">Train</h1>
-      <p className="screen-sub">Pick today’s session — Forge remembers where you left off.</p>
+      {/* No "Train" heading and no sentence explaining the screen: the tab bar
+          already names it, and the recommendation below answers it. What earns
+          the space at the top is the date and which block you're in. */}
+      <div className="page-head">
+        <span className="micro">{fmtToday(now)}</span>
+        {phase && <span className={`micro phase ${phase.phase}`}>{phase.label}</span>}
+      </div>
 
-      {phase && (
-        <div className={`block-banner ${phase.phase}`}>
-          <span className="block-bar" aria-hidden="true" />
-          <div>
-            <div className="block-label">{phase.label}</div>
-            <div className="block-note">{phase.note}</div>
-          </div>
-        </div>
-      )}
+      {phase && <div className={`block-banner ${phase.phase}`}>
+        <div className="block-note">{phase.note}</div>
+      </div>}
 
       <button className="coach-card" onClick={() => setPreviewDay(rec.dayType)}>
         <div className="coach-kind">{rec.fromPlan ? 'Today’s plan' : 'Train next'}</div>
@@ -137,32 +139,42 @@ export function TodayScreen({ history, settings, bodyLog, startWorkout, onChange
       <div className="recovery">
         {[...recovery.entries()].map(([muscle, days]) => (
           <div className="pill" key={muscle}>
-            <span
-              className="dot"
-              style={{ background: freshnessColor(days) }}
-            />
+            <span className="dot" style={{ background: freshnessColor(days) }} />
             <span>{MUSCLE_LABEL[muscle]}</span>
-            <span className="num">{days === Infinity ? '—' : `${Math.floor(days)}d`}</span>
+            <span className="num">
+              {days === Infinity ? '—' : Math.floor(days)}
+              {days !== Infinity && <i>d</i>}
+            </span>
           </div>
         ))}
       </div>
 
-      <div className="section-label">Gym days</div>
+      <div className="section-label">
+        <span>Gym days</span>
+        <span>Last</span>
+      </div>
       {DAYS.map((day) => {
         const last = lastSessionOf(day.id, history)
         const since = daysSince(last?.startedAt, now)
         return (
           <button key={day.id} className="day-card" onClick={() => setPreviewDay(day.id)}>
+            {/* The elapsed figure is the column you actually scan, so it leads
+                the row rather than sitting inside a prose meta line. */}
+            <span className="rowkey">
+              {since === null ? '—' : since === 0 ? 'Today' : `${since}d`}
+            </span>
             <div>
               <h3>{day.name}</h3>
-              <div className={`meta${since !== null && since >= 5 ? ' fresh' : ''}`}>
-                {since === null ? 'Never trained — clean slate'
-                  : since === 0 ? 'Trained today'
-                  : since === 1 ? 'Yesterday'
-                  : `${since} days ago`}
-              </div>
+              {/* The key column already gives the elapsed figure, so a second
+                  line restating it as prose is noise. It only earns the space
+                  when it has something the number can't say. */}
+              {since === null ? (
+                <div className="meta">Never trained</div>
+              ) : since >= 5 ? (
+                <div className="meta fresh">Fully recovered</div>
+              ) : null}
             </div>
-            <span className="chev"><ChevronIcon /></span>
+            <span className="chev"><ChevronIcon size={16} /></span>
           </button>
         )
       })}
@@ -179,11 +191,12 @@ export function TodayScreen({ history, settings, bodyLog, startWorkout, onChange
           })
         }
       >
+        <span className="rowkey">Open</span>
         <div>
-          <h3>Freestyle session</h3>
+          <h3>Freestyle</h3>
           <div className="meta">No template — pick lifts as you go</div>
         </div>
-        <span className="chev"><ChevronIcon /></span>
+        <span className="chev"><ChevronIcon size={16} /></span>
       </button>
 
       {previewDay && (

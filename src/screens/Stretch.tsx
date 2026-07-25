@@ -54,12 +54,12 @@ export function StretchScreen({ history, onLogged, focus = [] }: StretchProps) {
 
   return (
     <>
-      <h1 className="screen-title">Stretch</h1>
-      <p className="screen-sub">
-        {mode === 'muscles'
-          ? 'Key holds for every muscle group — best after training, when warm.'
-          : 'The antidote to sitting all day: back, neck and hips, daily.'}
-      </p>
+      <div className="screen-head">
+        <h1 className="screen-title">Stretch</h1>
+        <span className="micro">
+          {mode === 'muscles' ? 'After training, warm' : 'Daily'}
+        </span>
+      </div>
 
       <div className="seg" role="radiogroup" aria-label="Stretch set">
         <button role="radio" aria-checked={mode === 'muscles'}
@@ -112,8 +112,7 @@ function GroupBlock({ group, days, highlighted, selected, onToggle }: {
           {days === Infinity ? 'never' : days < 1 ? 'today' : `${Math.floor(days)}d ago`}
         </span>
       </div>
-      <div className={`card${highlighted ? ' focus' : ''}`}
-        style={{ paddingTop: 'var(--s1)', paddingBottom: 'var(--s1)' }}>
+      <div className={`card pane${highlighted ? ' focus' : ''}`}>
         {group.stretches.map((s) => {
           const isOn = selected.has(s.id)
           return (

@@ -584,9 +584,9 @@ function SummaryView({ summary, dayType, history, onDone, onStretch }: {
         </div>
       ))}
       {prs.length === 0 && (
-        <div className="card" style={{ color: 'var(--text-dim)', fontSize: 13.5, lineHeight: 1.55 }}>
+        <p className="sub" style={{ maxWidth: '38ch' }}>
           No PRs today — showing up is the PR. The engine has adjusted your next targets.
-        </div>
+        </p>
       )}
 
       {stretchGroups.length > 0 && (

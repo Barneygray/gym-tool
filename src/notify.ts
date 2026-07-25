@@ -27,7 +27,7 @@ export async function requestNotifications(): Promise<NotificationPermission> {
 export async function notifyRestDone(): Promise<void> {
   if (notificationPermission() !== 'granted') return
   if (typeof document !== 'undefined' && document.visibilityState === 'visible') return
-  const title = 'Rest complete 💪'
+  const title = 'Rest complete'
   const options: NotificationOptions = {
     body: 'Time for your next set.',
     tag: 'forge-rest',

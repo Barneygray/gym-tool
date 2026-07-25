@@ -132,14 +132,15 @@ export function SettingsScreen({ settings, onChanged, syncing, onSyncNow, syncEr
 
   return (
     <>
-      <h1 className="screen-title">Setup</h1>
-      <p className="screen-sub">Your gym, your bar, your data.</p>
+      <div className="screen-head">
+        <h1 className="screen-title">Setup</h1>
+      </div>
 
       <div className="section-label">Equipment</div>
       <Gyms settings={settings} update={update} />
 
       <div className="section-label">Rest timer</div>
-      <div className="card">
+      <div className="card pane">
         <div className="settings-row">
           <div>
             <div className="k">Rest timer sound</div>
@@ -163,7 +164,7 @@ export function SettingsScreen({ settings, onChanged, syncing, onSyncNow, syncEr
       <WeeklyPlan settings={settings} update={update} />
 
       <div className="section-label">Autoregulation</div>
-      <div className="card">
+      <div className="card pane">
         <div className="settings-row">
           <div>
             <div className="k">Readiness check</div>
@@ -194,11 +195,11 @@ export function SettingsScreen({ settings, onChanged, syncing, onSyncNow, syncEr
       {supabaseConfigured && (
         <>
           <div className="section-label">Cloud Backup</div>
-          <div className="card">
+          <div className="card pane">
             <div className="settings-row">
               <div>
                 <div className="k">
-                  {syncing ? 'Syncing…' : syncError ? 'Backup problem' : 'Cloud sync on ✓'}
+                  {syncing ? 'Syncing…' : syncError ? 'Backup problem' : 'Cloud sync on'}
                 </div>
                 <div className="sub">Every session — including edits and deletions — saves to the cloud automatically. Open the app on any device to get your full history back.</div>
               </div>
@@ -217,7 +218,7 @@ export function SettingsScreen({ settings, onChanged, syncing, onSyncNow, syncEr
       )}
 
       <div className="section-label">Data</div>
-      <div className="card">
+      <div className="card pane">
         <div className="settings-row">
           <div>
             <div className="k">Export backup</div>
@@ -342,7 +343,7 @@ function Gyms({ settings, update }: {
   }
 
   return (
-    <div className="card">
+    <div className="card pane">
       {profiles.length > 1 && (
         <div className="settings-row stack">
           <div>
@@ -441,7 +442,7 @@ function WeeklyPlan({ settings, update }: {
   }
 
   return (
-    <div className="card">
+    <div className="card pane">
       <div className="settings-row">
         <div>
           <div className="k">Sessions per week</div>
@@ -506,7 +507,7 @@ function RestAlertsRow() {
         </div>
       </div>
       {perm === 'granted'
-        ? <span className="k ok">On ✓</span>
+        ? <span className="micro ok">Enabled</span>
         : <button className="btn-small accent" onClick={enable} disabled={perm === 'denied'}>Enable</button>}
     </div>
   )
@@ -535,7 +536,7 @@ function CustomExercises({ onChanged }: { onChanged: () => Promise<void> }) {
   }
 
   return (
-    <div className="card">
+    <div className="card pane">
       {list.length === 0 && !adding && (
         <p className="sub" style={{ marginBottom: 'var(--s3)' }}>
           Add the machines and variations your gym has. Custom lifts show up as swap and add options,
@@ -643,7 +644,7 @@ function TrainingBlock({ settings, update }: {
 
   if (settings.meso && phase) {
     return (
-      <div className="card">
+      <div className="card pane">
         <div className="settings-row">
           <div>
             <div className="k">{phase.label}</div>
@@ -660,7 +661,7 @@ function TrainingBlock({ settings, update }: {
   }
 
   return (
-    <div className="card">
+    <div className="card pane">
       <div className="settings-row stack">
         <div>
           <div className="k">Run a mesocycle</div>
@@ -704,7 +705,7 @@ function Reminders({ settings, update }: {
   }
 
   return (
-    <div className="card">
+    <div className="card pane">
       <div className="settings-row">
         <div>
           <div className="k">Time to train</div>
@@ -799,7 +800,7 @@ function PrivateSyncKey({ onSyncNow }: { onSyncNow: () => Promise<void> }) {
     <div className="settings-row sync-key">
       <div>
         <div className="k">
-          {key ? <>Private backup <span className="ok">· on ✓</span></> : 'Shared public bucket'}
+          {key ? <>Private backup <span className="ok">· on</span></> : 'Shared public bucket'}
         </div>
         <div className="sub">
           {key
@@ -815,7 +816,7 @@ function PrivateSyncKey({ onSyncNow }: { onSyncNow: () => Promise<void> }) {
             <button className="btn-small" onClick={() => setRevealed((r) => !r)}>
               {revealed ? 'Hide' : 'Reveal'}
             </button>
-            <button className="btn-small accent" onClick={copy}>{copied ? 'Copied ✓' : 'Copy'}</button>
+            <button className="btn-small accent" onClick={copy}>{copied ? 'Copied' : 'Copy'}</button>
             <button className="btn-small" onClick={() => setEntering(true)}>Enter a key</button>
           </div>
           <div className="sub" style={{ marginTop: 'var(--s2)' }}>
@@ -875,7 +876,7 @@ function CustomDays({ onChanged }: { onChanged: () => Promise<void> }) {
   }
 
   return (
-    <div className="card">
+    <div className="card pane">
       {list.length === 0 && !adding && (
         <p className="sub" style={{ marginBottom: 'var(--s3)' }}>
           Build your own split — upper/lower, full-body, whatever you run. Custom days appear on Train
