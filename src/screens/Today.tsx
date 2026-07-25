@@ -17,7 +17,7 @@ import { saveSettings } from '../db/db'
 import { pushSettings } from '../db/sync'
 import { lastSessionOf } from '../engine/history'
 import { recoveryByMuscle, daysSince } from '../engine/stats'
-import { ChevronIcon, CloseIcon, LinkIcon, SwapIcon } from '../components/Icons'
+import { AlertIcon, ChevronIcon, CloseIcon, LinkIcon, SwapIcon } from '../components/Icons'
 import { formatNum } from '../components/Stepper'
 import type { ActiveWorkout } from '../App'
 
@@ -28,6 +28,9 @@ const MUSCLE_LABEL: Record<Muscle, string> = {
 
 const WEEKDAY_LETTER = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
 const WEEKDAY_FULL = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+
+const fmtToday = (now: number) =>
+  new Date(now).toLocaleDateString('en', { weekday: 'long', day: 'numeric', month: 'long' })
 
 interface TodayProps {
   history: Session[]
@@ -58,42 +61,57 @@ export function TodayScreen({ history, settings, bodyLog, startWorkout, onChange
 
   return (
     <>
-      <h1 className="screen-title">Train</h1>
-      <p className="screen-sub">Pick today’s session — Forge remembers where you left off.</p>
+      {/* No "Train" heading and no sentence explaining the screen: the tab bar
+          already names it, and the recommendation below answers it. What earns
+          the space at the top is the date and which block you're in. */}
+      <div className="page-head">
+        <span className="micro">{fmtToday(now)}</span>
+        {phase && <span className={`micro phase ${phase.phase}`}>{phase.label}</span>}
+      </div>
 
-      {phase && (
-        <div className={`block-banner ${phase.phase}`}>
-          <div className="block-label">{phase.label}</div>
-          <div className="block-note">{phase.note}</div>
-        </div>
-      )}
+      {phase && <div className={`block-banner ${phase.phase}`}>
+        <div className="block-note">{phase.note}</div>
+      </div>}
 
       <button className="coach-card" onClick={() => setPreviewDay(rec.dayType)}>
         <div className="coach-kind">{rec.fromPlan ? 'Today’s plan' : 'Train next'}</div>
         <div className="coach-day">{rec.dayName}</div>
         <div className="coach-why">{rec.reason}</div>
-        {rec.conflict && <div className="coach-conflict">{rec.conflict.note}</div>}
-        {rec.overdue.length > 0 && (
-          <div className="coach-overdue">
-            Overdue: {rec.overdue.slice(0, 4).map((m) => MUSCLE_LABEL[m]).join(' · ')}
+        {rec.conflict && (
+          <div className="coach-conflict">
+            <AlertIcon />
+            <span>{rec.conflict.note}</span>
           </div>
         )}
-        {rec.underVolume.length > 0 && (
-          <div className="coach-overdue">
-            Low volume this week: {rec.underVolume.slice(0, 4).map((m) => MUSCLE_LABEL[m]).join(' · ')}
-          </div>
-        )}
-        {rec.staleMobility.length > 0 && (
-          <div className="coach-overdue">
-            Not stretched lately: {groupNames(rec.staleMobility.slice(0, 2)).join(' · ')}
-          </div>
+        {(rec.overdue.length > 0 || rec.underVolume.length > 0 || rec.staleMobility.length > 0) && (
+          <dl className="coach-notes">
+            {rec.overdue.length > 0 && (
+              <div className="coach-note">
+                <dt>Overdue</dt>
+                <dd>{rec.overdue.slice(0, 4).map((m) => MUSCLE_LABEL[m]).join(' · ')}</dd>
+              </div>
+            )}
+            {rec.underVolume.length > 0 && (
+              <div className="coach-note">
+                <dt>Low volume</dt>
+                <dd>{rec.underVolume.slice(0, 4).map((m) => MUSCLE_LABEL[m]).join(' · ')}</dd>
+              </div>
+            )}
+            {rec.staleMobility.length > 0 && (
+              <div className="coach-note">
+                <dt>Unstretched</dt>
+                <dd>{groupNames(rec.staleMobility.slice(0, 2)).join(' · ')}</dd>
+              </div>
+            )}
+          </dl>
         )}
       </button>
 
       <GymSwitcher settings={settings} onChanged={onChanged} />
 
       <div className="section-label">
-        This week · {planned}× {custom ? 'your plan' : 'auto plan'}
+        <span>This week</span>
+        <span>{planned}× · {custom ? 'your plan' : 'auto plan'}</span>
       </div>
       <div className="week-plan">
         {plan.map((d) => (
@@ -107,43 +125,56 @@ export function TodayScreen({ history, settings, bodyLog, startWorkout, onChange
           >
             <span className="wd" aria-hidden="true">{WEEKDAY_LETTER[d.weekday]}</span>
             <span className="pd-name">{d.dayType ? shortDayLabel(d.dayType) : 'Rest'}</span>
-            {d.weekday === todayIdx && <span className="pd-today">Today</span>}
+            {/* A dot, not a "TODAY" caption — the caption made this one cell a
+                line taller than the six beside it. */}
+            {d.weekday === todayIdx && <span className="pd-today" aria-hidden="true" />}
           </button>
         ))}
       </div>
 
-      <div className="section-label">Muscle freshness</div>
+      <div className="section-label">
+        <span>Muscle freshness</span>
+        <span>Days rested</span>
+      </div>
       <div className="recovery">
         {[...recovery.entries()].map(([muscle, days]) => (
           <div className="pill" key={muscle}>
-            <span
-              className="dot"
-              style={{ background: freshnessColor(days) }}
-            />
+            <span className="dot" style={{ background: freshnessColor(days) }} />
             <span>{MUSCLE_LABEL[muscle]}</span>
-            <span className="num" style={{ color: 'var(--text-faint)' }}>
-              {days === Infinity ? '—' : `${Math.floor(days)}d`}
+            <span className="num">
+              {days === Infinity ? '—' : Math.floor(days)}
+              {days !== Infinity && <i>d</i>}
             </span>
           </div>
         ))}
       </div>
 
-      <div className="section-label">Gym days</div>
+      <div className="section-label">
+        <span>Gym days</span>
+        <span>Last</span>
+      </div>
       {DAYS.map((day) => {
         const last = lastSessionOf(day.id, history)
         const since = daysSince(last?.startedAt, now)
         return (
           <button key={day.id} className="day-card" onClick={() => setPreviewDay(day.id)}>
+            {/* The elapsed figure is the column you actually scan, so it leads
+                the row rather than sitting inside a prose meta line. */}
+            <span className="rowkey">
+              {since === null ? '—' : since === 0 ? 'Today' : `${since}d`}
+            </span>
             <div>
               <h3>{day.name}</h3>
-              <div className={`meta${since !== null && since >= 5 ? ' fresh' : ''}`}>
-                {since === null ? 'Never trained — clean slate'
-                  : since === 0 ? 'Trained today'
-                  : since === 1 ? 'Yesterday'
-                  : `${since} days ago`}
-              </div>
+              {/* The key column already gives the elapsed figure, so a second
+                  line restating it as prose is noise. It only earns the space
+                  when it has something the number can't say. */}
+              {since === null ? (
+                <div className="meta">Never trained</div>
+              ) : since >= 5 ? (
+                <div className="meta fresh">Fully recovered</div>
+              ) : null}
             </div>
-            <span className="chev"><ChevronIcon /></span>
+            <span className="chev"><ChevronIcon size={16} /></span>
           </button>
         )
       })}
@@ -160,11 +191,12 @@ export function TodayScreen({ history, settings, bodyLog, startWorkout, onChange
           })
         }
       >
+        <span className="rowkey">Open</span>
         <div>
-          <h3>Freestyle session</h3>
+          <h3>Freestyle</h3>
           <div className="meta">No template — pick lifts as you go</div>
         </div>
-        <span className="chev"><ChevronIcon /></span>
+        <span className="chev"><ChevronIcon size={16} /></span>
       </button>
 
       {previewDay && (
@@ -230,11 +262,17 @@ function GymSwitcher({ settings, onChanged }: { settings: Settings; onChanged: (
   )
 }
 
+/**
+ * A traffic light on readiness, not on the accent: red is "just hammered,
+ * leave it", green is "recovered, hit it". Ember used to stand for freshly
+ * trained, which put the app's accent colour on the muscles you should
+ * *avoid* — and left nothing distinguishing it from every other accent.
+ */
 function freshnessColor(days: number): string {
   if (days === Infinity) return 'var(--text-faint)'
-  if (days < 1.5) return 'var(--ember)' // freshly hammered
-  if (days < 3) return '#eab308'
-  return 'var(--green)' // recovered, ready to hit
+  if (days < 1.5) return 'var(--bad)'
+  if (days < 3) return 'var(--warn)'
+  return 'var(--green)'
 }
 
 function WorkoutPreview({ dayType, history, settings, phase, bwAt, onClose, onStart }: {
@@ -299,13 +337,20 @@ function WorkoutPreview({ dayType, history, settings, phase, bwAt, onClose, onSt
     <>
       <div className="sheet-backdrop" onClick={onClose} />
       <div className="sheet">
-        <h2 className="screen-title" style={{ fontSize: 24 }}>{day.name}</h2>
-        <p className="screen-sub" style={{ marginBottom: 8 }}>
-          Rotated for fresh stimulus — swap, add, drop, or link two into a superset.
-        </p>
+        <div className="sheet-head">
+          <div>
+            <h2 className="sheet-title">{day.name}</h2>
+            <p className="sheet-sub">
+              Rotated for fresh stimulus — swap, add, drop, or link two into a superset.
+            </p>
+          </div>
+          <button className="icon-btn sheet-close" aria-label="Close" onClick={onClose}>
+            <CloseIcon size={20} />
+          </button>
+        </div>
 
         {askReadiness && (
-          <div className="readiness">
+          <div className="readiness" style={{ marginTop: 'var(--s4)' }}>
             <div className="section-label" style={{ marginTop: 0 }}>How are you feeling?</div>
             <div className="seg" role="radiogroup" aria-label="How are you feeling?">
               {READINESS_LEVELS.map((level) => (
@@ -320,48 +365,55 @@ function WorkoutPreview({ dayType, history, settings, phase, bwAt, onClose, onSt
           </div>
         )}
 
-        {exerciseIds.map((id, i) => {
-          const exercise = getExercise(id)
-          const suggestion = suggestFor(exercise, history, settings, phase, { bwAt, readiness })
-          const gi = groupIndexOf(id)
-          const linkedUp = joined.has(id) && gi >= 0
-          return (
-            <div key={id}>
-              {i > 0 && (
-                <button
-                  className={`link-row${linkedUp ? ' on' : ''}`}
-                  onClick={() => toggleJoin(id)}
-                  aria-label={linkedUp ? 'Unlink superset' : `Superset with ${getExercise(exerciseIds[i - 1]).name}`}
-                >
-                  <LinkIcon size={15} />
-                  {linkedUp ? 'Superset' : 'Superset with above'}
-                </button>
-              )}
-              <div className={`preview-row${gi >= 0 ? ' in-super' : ''}`}>
-                <div style={{ minWidth: 0 }}>
-                  <div className="name">
-                    {gi >= 0 && <span className="super-tag">SS{gi + 1}</span>}
-                    {exercise.name}
-                  </div>
-                  <div className="detail num">
-                    {suggestion.kind === 'start'
-                      ? `${suggestion.sets} × ${suggestion.targetReps} · find your weight`
-                      : `${suggestion.sets} × ${suggestion.targetReps} @ ${formatNum(suggestion.weight)} kg`}
-                  </div>
-                </div>
-                <span className="muscle-tag">{MUSCLE_LABEL[exercise.primary]}</span>
-                <button className="swap-btn" onClick={() => swap(i)} aria-label={`Swap ${exercise.name}`}>
-                  <SwapIcon />
-                </button>
-                {exerciseIds.length > 1 && (
-                  <button className="swap-btn" onClick={() => removeAt(i)} aria-label={`Remove ${exercise.name}`}>
-                    <CloseIcon size={17} />
+        <div className="exercise-list">
+          {exerciseIds.map((id, i) => {
+            const exercise = getExercise(id)
+            const suggestion = suggestFor(exercise, history, settings, phase, { bwAt, readiness })
+            const gi = groupIndexOf(id)
+            const linkedUp = joined.has(id) && gi >= 0
+            return (
+              <div key={id}>
+                {/* The link control sits *on* the hairline between two rows.
+                    It used to be a full "Superset with above" caption under
+                    every single row, which doubled the list's height. */}
+                {i > 0 && (
+                  <button
+                    className={`link-row${linkedUp ? ' on' : ''}`}
+                    onClick={() => toggleJoin(id)}
+                    aria-label={linkedUp ? 'Unlink superset' : `Superset with ${getExercise(exerciseIds[i - 1]).name}`}
+                  >
+                    <LinkIcon size={14} />
+                    {linkedUp && <span>Superset</span>}
                   </button>
                 )}
+                <div className={`preview-row${gi >= 0 ? ' in-super' : ''}`}>
+                  <div style={{ minWidth: 0 }}>
+                    <div className="name">
+                      {gi >= 0 && <span className="super-tag">SS{gi + 1}</span>}
+                      {exercise.name}
+                    </div>
+                    <div className="detail num">
+                      {suggestion.kind === 'start'
+                        ? `${suggestion.sets} × ${suggestion.targetReps} · find your weight`
+                        : `${suggestion.sets} × ${suggestion.targetReps} @ ${formatNum(suggestion.weight)} kg`}
+                    </div>
+                  </div>
+                  <span className="muscle-tag">{MUSCLE_LABEL[exercise.primary]}</span>
+                  <div className="row-actions">
+                    <button className="swap-btn" onClick={() => swap(i)} aria-label={`Swap ${exercise.name}`}>
+                      <SwapIcon />
+                    </button>
+                    {exerciseIds.length > 1 && (
+                      <button className="swap-btn" onClick={() => removeAt(i)} aria-label={`Remove ${exercise.name}`}>
+                        <CloseIcon size={17} />
+                      </button>
+                    )}
+                  </div>
+                </div>
               </div>
-            </div>
-          )
-        })}
+            )
+          })}
+        </div>
 
         {adding ? (
           <AddExercisePicker
@@ -370,15 +422,14 @@ function WorkoutPreview({ dayType, history, settings, phase, bwAt, onClose, onSt
             onCancel={() => setAdding(false)}
           />
         ) : (
-          <button className="btn-ghost" style={{ marginTop: 12 }} onClick={() => setAdding(true)}>
+          <button className="btn-ghost mt-3" onClick={() => setAdding(true)}>
             + Add exercise
           </button>
         )}
 
-        <div style={{ height: 14 }} />
+        <div style={{ height: 'var(--s4)' }} />
         <button className="btn-primary" onClick={() => onStart(exerciseIds, supersets, readiness)}
-          disabled={exerciseIds.length === 0}
-          style={{ opacity: exerciseIds.length === 0 ? 0.4 : 1 }}>
+          disabled={exerciseIds.length === 0}>
           Start {day.name}
         </button>
       </div>

@@ -94,3 +94,44 @@ export const LinkIcon = ({ size = 18 }: IconProps) => (
     <path d="M10.5 8H8a4 4 0 0 0 0 8h2.5M13.5 8H16a4 4 0 0 1 0 8h-2.5" />
   </svg>
 )
+
+export const CheckIcon = ({ size = 13 }: IconProps) => (
+  <svg {...base(size)} strokeWidth={3}>
+    <path d="m5 12.5 4.5 4.5L19 7" />
+  </svg>
+)
+
+export const AlertIcon = ({ size = 14 }: IconProps) => (
+  <svg {...base(size)}>
+    <path d="M12 9v4.5M12 17h.01" />
+    <path d="M10.3 3.9 2.5 17.4A2 2 0 0 0 4.2 20.5h15.6a2 2 0 0 0 1.7-3.1L13.7 3.9a2 2 0 0 0-3.4 0Z" />
+  </svg>
+)
+
+export const TrophyIcon = ({ size = 22 }: IconProps) => (
+  <svg {...base(size)}>
+    <path d="M7 4h10v5a5 5 0 0 1-10 0V4Z" />
+    <path d="M7 5.5H4.5v1A3.5 3.5 0 0 0 7.6 10M17 5.5h2.5v1A3.5 3.5 0 0 1 16.4 10" />
+    <path d="M12 14v3M9 20h6M10 20c0-1.7.9-3 2-3s2 1.3 2 3" />
+  </svg>
+)
+
+/** Right-pointing caret used for disclosure rows; rotates when open. */
+export const CaretIcon = ({ size = 12 }: IconProps) => (
+  <svg {...base(size)} strokeWidth={2.6}>
+    <path d="m9 5 7 7-7 7" />
+  </svg>
+)
+
+export const BookIcon = ({ size = 24 }: IconProps) => (
+  <svg {...base(size)}>
+    <path d="M4 5.5A2 2 0 0 1 6 3.5h13v15H6a2 2 0 0 0-2 2Z" />
+    <path d="M4 5.5v15" />
+  </svg>
+)
+
+export const SparkIcon = ({ size = 24 }: IconProps) => (
+  <svg {...base(size)}>
+    <path d="M13.5 2.5 5 13.5h5.5L9.5 21.5 18.5 10h-5.5l.5-7.5Z" />
+  </svg>
+)

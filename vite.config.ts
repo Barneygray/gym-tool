@@ -14,8 +14,8 @@ export default defineConfig(({ mode }) => ({
         name: 'Forge — Gym Helper',
         short_name: 'Forge',
         description: 'Personal training log with progressive overload suggestions',
-        theme_color: '#0c0c0e',
-        background_color: '#0c0c0e',
+        theme_color: '#0a0a0c',
+        background_color: '#0a0a0c',
         display: 'standalone',
         orientation: 'portrait',
         icons: [

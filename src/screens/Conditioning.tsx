@@ -4,6 +4,7 @@ import { CONDITIONING, setsInScheme } from '../data/conditioning'
 import { saveSession } from '../db/db'
 import { pushSession } from '../db/sync'
 import { daysSince } from '../engine/stats'
+import { CheckIcon } from '../components/Icons'
 
 const PURPOSE_LABEL = { power: 'Power', core: 'Core', spine: 'Spine' } as const
 type Filter = 'all' | 'power' | 'core' | 'spine'
@@ -68,10 +69,10 @@ export function ConditioningScreen({ history, onLogged }: ConditioningProps) {
 
   return (
     <>
-      <h1 className="screen-title">Condition</h1>
-      <p className="screen-sub">
-        Explosive strength and a bulletproof trunk — the base your lifts stand on.
-      </p>
+      <div className="screen-head">
+        <h1 className="screen-title">Condition</h1>
+        <span className="micro">{moves.length} movements</span>
+      </div>
 
       <div className="seg" role="radiogroup" aria-label="Filter movements">
         {(['all', 'power', 'core', 'spine'] as Filter[]).map((f) => (
@@ -82,7 +83,7 @@ export function ConditioningScreen({ history, onLogged }: ConditioningProps) {
         ))}
       </div>
 
-      <div className="card" style={{ paddingTop: 4, paddingBottom: 4 }}>
+      <div className="card pane">
         {moves.map((m) => {
           const since = daysSince(lastDone.get(m.id), now)
           const isOn = selected.has(m.id)
@@ -94,22 +95,22 @@ export function ConditioningScreen({ history, onLogged }: ConditioningProps) {
                   e.preventDefault()
                   toggle(m.id)
                 }
-              }}
-              style={{ cursor: 'pointer' }}>
-              <div className="top">
-                <span className="name" style={isOn ? { color: 'var(--ember)' } : undefined}>
-                  {isOn ? '● ' : ''}{m.name}
-                </span>
-                <span className="scheme num">{m.scheme}</span>
-              </div>
-              <div className="cue">{m.cue}</div>
-              <div className="cond-purpose">
-                {m.purpose.map((p) => <span key={p}>{PURPOSE_LABEL[p]}</span>)}
-                {since !== null && (
-                  <span className="cond-done" style={{ border: 'none', background: 'none' }}>
-                    done {since === 0 ? 'today' : `${since}d ago`}
-                  </span>
-                )}
+              }}>
+              <span className="check" aria-hidden="true"><CheckIcon /></span>
+              <div>
+                <div className="top">
+                  <span className="name">{m.name}</span>
+                  <span className="scheme num">{m.scheme}</span>
+                </div>
+                <div className="cue">{m.cue}</div>
+                <div className="cond-meta">
+                  {m.purpose.map((p) => <span className="tag" key={p}>{PURPOSE_LABEL[p]}</span>)}
+                  {since !== null && (
+                    <span className="cond-done">
+                      Done {since === 0 ? 'today' : `${since}d ago`}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
           )
@@ -118,7 +119,7 @@ export function ConditioningScreen({ history, onLogged }: ConditioningProps) {
 
       {selected.size > 0 && (
         <>
-          <div style={{ height: 16 }} />
+          <div style={{ height: 'var(--s5)' }} />
           <button className="btn-primary" onClick={logSelected}>
             Log {selected.size} movement{selected.size > 1 ? 's' : ''} done
           </button>

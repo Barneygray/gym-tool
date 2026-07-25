@@ -21,7 +21,7 @@ import { Stepper, formatNum } from '../components/Stepper'
 import { RestTimer } from '../components/RestTimer'
 import { ExercisePicker } from '../components/ExercisePicker'
 import { nextPartner } from '../engine/superset'
-import { BackIcon, CloseIcon, SwapIcon, TrashIcon } from '../components/Icons'
+import { BackIcon, CaretIcon, CloseIcon, LinkIcon, SwapIcon, TrashIcon, TrophyIcon } from '../components/Icons'
 import type { ActiveWorkout } from '../App'
 
 const KIND_LABEL = {
@@ -57,15 +57,17 @@ function EmptyWorkout({ active, setActive }: WorkoutProps) {
   return (
     <>
       <div className="workout-header">
-        <button onClick={() => setActive(null)} aria-label="Leave session"><BackIcon /></button>
-        <div style={{ textAlign: 'center' }}>
-          <div style={{ fontWeight: 700 }}>{dayName(active.dayType)}</div>
-          <div className="count num">0 exercises</div>
+        <button className="icon-btn" onClick={() => setActive(null)} aria-label="Leave session">
+          <BackIcon />
+        </button>
+        <div className="wh-title">
+          <div className="wh-day">{dayName(active.dayType)}</div>
+          <div className="count num">Nothing logged yet</div>
         </div>
-        <span style={{ width: 24 }} />
+        <span style={{ width: 38 }} />
       </div>
 
-      <h1 className="screen-title" style={{ fontSize: 24 }}>What are you starting with?</h1>
+      <h1 className="sheet-title">What are you starting with?</h1>
       <p className="screen-sub">
         Pick a lift and go. Add more as you work through the session — nothing here is fixed.
       </p>
@@ -294,19 +296,26 @@ function ActiveSession({ active, setActive, history, settings, bodyLog, onFinish
   return (
     <>
       <div className="workout-header">
-        <button onClick={() => go(-1)} disabled={index === 0}
-          style={{ color: index === 0 ? 'var(--text-faint)' : 'var(--text)' }}>
+        <button className="icon-btn" onClick={() => go(-1)} disabled={index === 0}
+          aria-label="Previous exercise">
           <BackIcon />
         </button>
-        <div style={{ textAlign: 'center' }}>
-          <div style={{ fontWeight: 700 }}>{dayName(active.dayType)}</div>
-          <div className="count num">{index + 1} / {active.exerciseIds.length}</div>
+        <div className="wh-title">
+          <div className="wh-day">{dayName(active.dayType)}</div>
+          <div className="count num">Station {index + 1} of {active.exerciseIds.length}</div>
         </div>
         <button className="btn-small" onClick={finish}>Finish</button>
       </div>
 
-      <h1 className="screen-title" style={{ fontSize: 24 }}>{exercise.name}</h1>
-      <p className="screen-sub" style={{ marginBottom: superset ? 8 : 14 }}>{exercise.cue}</p>
+      {/* Where you are in the session, without a sentence about it. */}
+      <div className="workout-progress" aria-hidden="true">
+        {active.exerciseIds.map((id, i) => (
+          <i key={id} className={i < index ? 'done' : i === index ? 'at' : ''} />
+        ))}
+      </div>
+
+      <h1 className="sheet-title">{exercise.name}</h1>
+      <p className="sheet-sub" style={{ marginBottom: 'var(--s4)' }}>{exercise.cue}</p>
 
       <div className="station-actions">
         <button className="btn-small" onClick={() => setPicking(picking === 'add' ? null : 'add')}>
@@ -338,8 +347,11 @@ function ActiveSession({ active, setActive, history, settings, bodyLog, onFinish
 
       {superset && (
         <div className="super-banner">
-          Superset · alternate with{' '}
-          {superset.filter((id) => id !== exercise.id).map((id) => getExercise(id).name).join(', ')}
+          <LinkIcon size={15} />
+          <span>
+            Superset · alternate with{' '}
+            {superset.filter((id) => id !== exercise.id).map((id) => getExercise(id).name).join(', ')}
+          </span>
         </div>
       )}
 
@@ -356,7 +368,7 @@ function ActiveSession({ active, setActive, history, settings, bodyLog, onFinish
         </div>
         <div className="why">{suggestion.reason}</div>
         {suggestion.offerSwap && untouched && (
-          <button className="btn-small accent" style={{ marginTop: 10 }}
+          <button className="btn-small accent" style={{ marginTop: 'var(--s3)' }}
             onClick={() => setPicking('swap')}>
             <SwapIcon size={14} /> Swap to a variation
           </button>
@@ -367,7 +379,7 @@ function ActiveSession({ active, setActive, history, settings, bodyLog, onFinish
 
       {warmups.length > 0 && (
         <div className="card warmup-list">
-          <div className="section-label" style={{ margin: '0 0 6px' }}>Warm-up ramp</div>
+          <div className="section-label" style={{ margin: '0 0 var(--s1)' }}>Warm-up ramp</div>
           {warmups.map((w, i) => (
             <div className="w-row num" key={i}>
               <span>{w.label}</span>
@@ -393,42 +405,49 @@ function ActiveSession({ active, setActive, history, settings, bodyLog, onFinish
         </div>
       )}
 
-      <div className="rpe-picker" role="group" aria-label="Rate of perceived exertion">
-        {[6, 7, 8, 9, 10].map((r) => (
-          <button key={r} className={rpe === r ? 'on' : ''} aria-pressed={rpe === r}
-            onClick={() => setRpe(rpe === r ? undefined : r)}>
-            RPE {r}
-          </button>
-        ))}
+      {/* One "RPE" label, five numbers — the word used to be stamped on all
+          five buttons, so half of each 60px target was the same three chars. */}
+      <div className="rpe-row">
+        <span className="label" aria-hidden="true">RPE</span>
+        <div className="rpe-picker" role="group" aria-label="Rate of perceived exertion">
+          {[6, 7, 8, 9, 10].map((r) => (
+            <button key={r} className={rpe === r ? 'on' : ''} aria-pressed={rpe === r}
+              aria-label={`RPE ${r}`} onClick={() => setRpe(rpe === r ? undefined : r)}>
+              {r}
+            </button>
+          ))}
+        </div>
       </div>
 
       {showNote ? (
         <input
-          style={{ width: '100%', margin: '8px 0' }}
+          style={{ width: '100%', marginBottom: 'var(--s3)' }}
           placeholder="Note — grip, tempo, tweaks…"
           value={note}
           onChange={(e) => setNote(e.target.value)}
           autoFocus
         />
       ) : (
-        <button className="btn-small" style={{ margin: '8px 0' }} onClick={() => setShowNote(true)}>
+        <button className="btn-small" style={{ marginBottom: 'var(--s3)' }} onClick={() => setShowNote(true)}>
           + note
         </button>
       )}
 
-      <button className="btn-primary" onClick={commitSet} disabled={reps <= 0}
-        style={{ opacity: reps <= 0 ? 0.4 : 1, marginTop: 6 }}>
+      <button className="btn-primary" onClick={commitSet} disabled={reps <= 0}>
         {editingIndex !== null ? `Update set ${editingIndex + 1}` : `Log set ${loggedSets.length + 1}`}
       </button>
       {editingIndex !== null && (
-        <button className="btn-ghost" style={{ marginTop: 8 }} onClick={seedInputs}>
+        <button className="btn-ghost mt-3" onClick={seedInputs}>
           Cancel edit
         </button>
       )}
 
       {loggedSets.length > 0 && (
         <div className="set-log">
-          <div className="section-label" style={{ marginTop: 18 }}>Logged — tap to edit</div>
+          <div className="section-label">
+            <span>Logged</span>
+            <span>Tap to edit</span>
+          </div>
           {loggedSets.map((s, i) => (
             <div className={`set-row${editingIndex === i ? ' editing' : ''}`} key={i}>
               <button className="set-tap" onClick={() => editSet(i)}>
@@ -448,7 +467,7 @@ function ActiveSession({ active, setActive, history, settings, bodyLog, onFinish
         </div>
       )}
 
-      <div style={{ height: 16 }} />
+      <div style={{ height: 'var(--s5)' }} />
       {!isLast ? (
         <button className="btn-ghost" onClick={() => go(1)}>
           Next: {getExercise(active.exerciseIds[index + 1]).name}
@@ -456,6 +475,10 @@ function ActiveSession({ active, setActive, history, settings, bodyLog, onFinish
       ) : (
         <button className="btn-ghost" onClick={finish}>Finish workout</button>
       )}
+
+      {/* The docked timer is fixed-position, so the scroll content has to give
+          up the room itself — otherwise it lands on top of the set list. */}
+      {rest && <div className="rest-spacer" aria-hidden="true" />}
 
       {rest && (
         <RestTimer
@@ -484,7 +507,8 @@ function ExerciseHistory({ exerciseId, history }: { exerciseId: string; history:
   return (
     <div className="ex-history">
       <button className="ex-history-toggle" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
-        {open ? '▾' : '▸'} Last {recent.length} session{recent.length > 1 ? 's' : ''}
+        <CaretIcon />
+        Last {recent.length} session{recent.length > 1 ? 's' : ''}
       </button>
       {open && recent.map((p) => (
         <div className="ex-history-session" key={p.startedAt}>
@@ -550,26 +574,29 @@ function SummaryView({ summary, dayType, history, onDone, onStretch }: {
 
       {prs.map((pr) => (
         <div className="pr-flash" key={`${pr.exerciseId}-${pr.kind}`}>
-          <div className="pr-kind">{pr.kind === 'weight' ? 'New weight PR' : 'New est. 1RM PR'}</div>
-          <div className="pr-line">
-            {getExercise(pr.exerciseId).name} — <span className="num">{formatNum(pr.weight)} kg × {pr.reps}</span>
+          <span className="pr-medal" aria-hidden="true"><TrophyIcon size={26} /></span>
+          <div style={{ minWidth: 0 }}>
+            <div className="pr-kind">{pr.kind === 'weight' ? 'New weight PR' : 'New est. 1RM PR'}</div>
+            <div className="pr-line">
+              {getExercise(pr.exerciseId).name} — <span className="num">{formatNum(pr.weight)} kg × {pr.reps}</span>
+            </div>
           </div>
         </div>
       ))}
       {prs.length === 0 && (
-        <div className="card" style={{ color: 'var(--text-dim)', fontSize: 14 }}>
+        <p className="sub" style={{ maxWidth: '38ch' }}>
           No PRs today — showing up is the PR. The engine has adjusted your next targets.
-        </div>
+        </p>
       )}
 
       {stretchGroups.length > 0 && (
-        <button className="btn-ghost stretch-offer" style={{ marginTop: 14 }}
+        <button className="btn-ghost stretch-offer mt-4"
           onClick={() => onStretch(stretchGroups)}>
           Stretch it out — {groupNames(stretchGroups).join(' · ')}
         </button>
       )}
 
-      <div style={{ height: 20 }} />
+      <div style={{ height: 'var(--s5)' }} />
       <button className="btn-primary" onClick={onDone}>Done</button>
     </>
   )

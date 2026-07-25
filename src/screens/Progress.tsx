@@ -12,12 +12,12 @@ import { isGymSession } from '../engine/mobility'
 import { deleteGoal, saveBodyweight, saveGoal } from '../db/db'
 import { pushRecord } from '../db/sync'
 import { formatNum } from '../components/Stepper'
-import { TrashIcon } from '../components/Icons'
+import { SparkIcon, TrashIcon } from '../components/Icons'
 
 /** Validated against the dark surface (dataviz six-checks). */
-const MARK = '#f4581f'
+const MARK = '#ff6b38'
 const STATUS_COLOR: Record<VolumeStatus, string> = {
-  none: 'var(--surface-2)', under: '#eab308', optimal: '#57d98f', high: '#ff5d5d',
+  none: 'var(--surface-3)', under: '#e9b949', optimal: '#3ecf8e', high: '#f2555a',
 }
 
 const MUSCLE_LABEL: Record<Muscle, string> = {
@@ -44,11 +44,13 @@ export function ProgressScreen({ history, bodyLog, goals, onChanged }: {
   if (history.length === 0 && bodyLog.length === 0) {
     return (
       <>
-        <h1 className="screen-title">Progress</h1>
+        <div className="screen-head">
+          <h1 className="screen-title">Progress</h1>
+        </div>
         <div className="empty-state">
-          <div className="big">⚡</div>
-          Nothing logged yet.<br />
-          Finish your first session and the trend lines start here.
+          <div className="big" aria-hidden="true"><SparkIcon /></div>
+          Nothing logged yet. Finish your first session and the trend lines
+          start here.
         </div>
         <GoalsCard goals={goals} history={history} bwAt={bwAt} now={Date.now()} onChanged={onChanged} />
         <BodyweightCard bodyLog={bodyLog} onChanged={onChanged} />
@@ -61,8 +63,10 @@ export function ProgressScreen({ history, bodyLog, goals, onChanged }: {
 
   return (
     <>
-      <h1 className="screen-title">Progress</h1>
-      <p className="screen-sub">The proof the plan is working.</p>
+      <div className="screen-head">
+        <h1 className="screen-title">Progress</h1>
+        <span className="micro">{trained.length} lifts tracked</span>
+      </div>
 
       {exerciseId && (
         <>
@@ -107,11 +111,14 @@ export function ProgressScreen({ history, bodyLog, goals, onChanged }: {
       {trained.length > 0 && (
         <>
           <div className="section-label">Personal records</div>
-          <p className="screen-sub" style={{ marginTop: -6 }}>
+          <p className="chart-sub" style={{ marginTop: 'calc(var(--s2) * -1)' }}>
             Best load in each rep band — a heavy triple and a set of fifteen aren’t
             the same achievement, so they don’t compete.
           </p>
-          <div className="card">
+          <div className="card pane">
+            {/* Five columns of numbers next to a lift name overflows 390px;
+                the table scrolls inside its card instead of squeezing. */}
+            <div className="pr-table-wrap">
             <table className="pr-table">
               <thead>
                 <tr>
@@ -148,6 +155,7 @@ export function ProgressScreen({ history, bodyLog, goals, onChanged }: {
                 })}
               </tbody>
             </table>
+            </div>
           </div>
         </>
       )}
@@ -181,8 +189,8 @@ function BodyweightCard({ bodyLog, onChanged }: { bodyLog: BodyLog[]; onChanged:
           : 'Log it to track the trend and get accurate pull-up / dip loads'}
       </div>
       {bodyLog.length >= 2 && <BodyweightChart points={bodyLog} />}
-      <div style={{ display: 'flex', gap: 8, marginTop: bodyLog.length >= 2 ? 12 : 4 }}>
-        <input style={{ flex: 1 }} type="number" inputMode="decimal" placeholder="Today’s weight (kg)"
+      <div style={{ display: 'flex', gap: 'var(--s2)', marginTop: 'var(--s3)' }}>
+        <input style={{ flex: 1, minWidth: 0 }} type="number" inputMode="decimal" placeholder="Today’s weight (kg)"
           value={value} onChange={(e) => setValue(e.target.value)} />
         <button className="btn-small accent" onClick={save} disabled={!value}>Log</button>
       </div>
@@ -213,9 +221,9 @@ function GoalsCard({ goals, history, bwAt, now, onChanged }: {
   return (
     <>
       <div className="section-label">Goals</div>
-      <div className="card">
+      <div className="card pane">
         {goals.length === 0 && !adding && (
-          <p className="sub" style={{ padding: '4px 0 12px', color: 'var(--text-dim)', fontSize: 14 }}>
+          <p className="sub" style={{ marginBottom: 'var(--s3)' }}>
             Set an estimated-1RM target and Forge projects when you’ll hit it from your trend.
           </p>
         )}
@@ -225,7 +233,7 @@ function GoalsCard({ goals, history, bwAt, now, onChanged }: {
         {adding ? (
           <GoalForm history={history} onSave={add} onCancel={() => setAdding(false)} />
         ) : (
-          <button className="btn-small accent" style={{ marginTop: goals.length > 0 ? 12 : 0 }}
+          <button className="btn-small" style={{ marginTop: goals.length > 0 ? 'var(--s3)' : 0 }}
             onClick={() => setAdding(true)}>
             + New goal
           </button>
@@ -244,7 +252,7 @@ function GoalRow({ goal, proj, onDelete }: {
   const pctText = `${Math.round(proj.pct * 100)}%`
   const barColor = proj.achieved ? 'var(--green)' : MARK
   const detail = proj.achieved
-    ? 'Hit it 🎉 — set a bigger one.'
+    ? 'Target hit — set a bigger one.'
     : proj.projectedAt !== null
       ? `On trend for ${fmtDate(proj.projectedAt)}${proj.perWeek > 0 ? ` · +${formatNum(Math.round(proj.perWeek * 10) / 10)} kg/wk` : ''}${proj.onPace === false ? ' · behind deadline' : proj.onPace === true ? ' · on pace' : ''}`
       : 'Keep logging — need an upward trend to project a date.'
@@ -254,14 +262,18 @@ function GoalRow({ goal, proj, onDelete }: {
       <div className="goal-head">
         <div className="goal-name">{name}</div>
         <div className="goal-target num">
-          {formatNum(Math.round(proj.current))} / {formatNum(goal.targetE1rm)} kg
+          <b>{formatNum(Math.round(proj.current))}</b> / {formatNum(goal.targetE1rm)} kg
         </div>
         <button className="set-del" aria-label={`Delete ${name} goal`} onClick={onDelete}>
           <TrashIcon size={16} />
         </button>
       </div>
-      <div className="goal-bar">
-        <div className="goal-bar-fill" style={{ width: `${Math.max(proj.pct * 100, 2)}%`, background: barColor }} />
+      {/* The percentage sits beside the track, not on the fill — at 90%+ it was
+          dark ink on a bright bar and unreadable. */}
+      <div className="goal-progress">
+        <div className="goal-bar">
+          <div className="goal-bar-fill" style={{ width: `${Math.max(proj.pct * 100, 2)}%`, background: barColor }} />
+        </div>
         <span className="goal-bar-pct num">{pctText}</span>
       </div>
       <div className="goal-detail">{detail}</div>
@@ -302,7 +314,7 @@ function GoalForm({ history, onSave, onCancel }: {
   return (
     <div className="ex-form" style={{ marginTop: 12 }}>
       <label>
-        <span className="sub" style={{ fontSize: 12 }}>Exercise</span>
+        <span>Exercise</span>
         <select value={exerciseId} onChange={(e) => setExerciseId(e.target.value)}>
           {ordered.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
         </select>
@@ -318,9 +330,9 @@ function GoalForm({ history, onSave, onCancel }: {
           <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
         </label>
       </div>
-      <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+      <div style={{ display: 'flex', gap: 'var(--s2)', marginTop: 'var(--s2)' }}>
         <button className="btn-small" style={{ flex: 1 }} onClick={onCancel}>Cancel</button>
-        <button className="btn-small accent" style={{ flex: 1, opacity: valid ? 1 : 0.4 }}
+        <button className="btn-small accent" style={{ flex: 1 }}
           disabled={!valid} onClick={submit}>Save goal</button>
       </div>
     </div>

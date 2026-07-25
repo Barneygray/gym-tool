@@ -132,14 +132,15 @@ export function SettingsScreen({ settings, onChanged, syncing, onSyncNow, syncEr
 
   return (
     <>
-      <h1 className="screen-title">Setup</h1>
-      <p className="screen-sub">Your gym, your bar, your data.</p>
+      <div className="screen-head">
+        <h1 className="screen-title">Setup</h1>
+      </div>
 
       <div className="section-label">Equipment</div>
       <Gyms settings={settings} update={update} />
 
       <div className="section-label">Rest timer</div>
-      <div className="card">
+      <div className="card pane">
         <div className="settings-row">
           <div>
             <div className="k">Rest timer sound</div>
@@ -163,7 +164,7 @@ export function SettingsScreen({ settings, onChanged, syncing, onSyncNow, syncEr
       <WeeklyPlan settings={settings} update={update} />
 
       <div className="section-label">Autoregulation</div>
-      <div className="card">
+      <div className="card pane">
         <div className="settings-row">
           <div>
             <div className="k">Readiness check</div>
@@ -194,11 +195,11 @@ export function SettingsScreen({ settings, onChanged, syncing, onSyncNow, syncEr
       {supabaseConfigured && (
         <>
           <div className="section-label">Cloud Backup</div>
-          <div className="card">
+          <div className="card pane">
             <div className="settings-row">
               <div>
                 <div className="k">
-                  {syncing ? 'Syncing…' : syncError ? 'Backup problem' : 'Cloud sync on ✓'}
+                  {syncing ? 'Syncing…' : syncError ? 'Backup problem' : 'Cloud sync on'}
                 </div>
                 <div className="sub">Every session — including edits and deletions — saves to the cloud automatically. Open the app on any device to get your full history back.</div>
               </div>
@@ -207,7 +208,7 @@ export function SettingsScreen({ settings, onChanged, syncing, onSyncNow, syncEr
               </button>
             </div>
             {syncError && !syncing && (
-              <div className="sub" style={{ color: '#ff5d5d', marginTop: 4 }}>
+              <div className="sub danger" style={{ marginTop: 'var(--s1)' }}>
                 {syncError} We’ll retry on the next change or sync.
               </div>
             )}
@@ -217,7 +218,7 @@ export function SettingsScreen({ settings, onChanged, syncing, onSyncNow, syncEr
       )}
 
       <div className="section-label">Data</div>
-      <div className="card">
+      <div className="card pane">
         <div className="settings-row">
           <div>
             <div className="k">Export backup</div>
@@ -258,11 +259,7 @@ export function SettingsScreen({ settings, onChanged, syncing, onSyncNow, syncEr
         </div>
       </div>
 
-      {status && (
-        <p style={{ textAlign: 'center', color: 'var(--green)', marginTop: 16, fontSize: 14 }}>
-          {status}
-        </p>
-      )}
+      {status && <p className="flash">{status}</p>}
     </>
   )
 }
@@ -346,9 +343,9 @@ function Gyms({ settings, update }: {
   }
 
   return (
-    <div className="card">
+    <div className="card pane">
       {profiles.length > 1 && (
-        <div className="settings-row" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+        <div className="settings-row stack">
           <div>
             <div className="k">Training at</div>
             <div className="sub">Switch gyms and every suggestion re-rounds to what’s on the rack.</div>
@@ -379,17 +376,19 @@ function Gyms({ settings, update }: {
           onChange={(e) => writeProfile({ ...active, barWeightKg: Number(e.target.value) || 20 })} />
       </div>
 
-      <div className="settings-row" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+      <div className="settings-row stack">
         <div>
           <div className="k">Plates available (kg, per side)</div>
           <div className="sub">Comma separated — determines every loadable weight</div>
         </div>
-        <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-          <input style={{ flex: 1 }} value={platesText}
+        <div style={{ display: 'flex', gap: 'var(--s2)', marginTop: 'var(--s3)' }}>
+          <input style={{ flex: 1, minWidth: 0 }} value={platesText}
             onChange={(e) => setPlatesText(e.target.value)} onBlur={savePlates} />
           <button className="btn-small accent" onClick={savePlates}>Save</button>
         </div>
-        <div className="ob-presets" style={{ marginTop: 10 }}>
+        {/* Presets wrap as chips. Stacked full-width bars made four shortcuts
+            look like four primary actions. */}
+        <div className="chip-row" style={{ marginTop: 'var(--s3)' }}>
           {PLATE_PRESETS.map((preset) => (
             <button key={preset.name} className="btn-small"
               onClick={() => {
@@ -403,14 +402,14 @@ function Gyms({ settings, update }: {
       </div>
 
       {editingId === 'new' ? (
-        <div style={{ display: 'flex', gap: 8, padding: '12px 0 2px' }}>
-          <input style={{ flex: 1 }} autoFocus placeholder="Gym name — e.g. Hotel gym"
+        <div style={{ display: 'flex', gap: 'var(--s2)', paddingTop: 'var(--s3)' }}>
+          <input style={{ flex: 1, minWidth: 0 }} autoFocus placeholder="Gym name — e.g. Hotel gym"
             value={newName} onChange={(e) => setNewName(e.target.value)} />
           <button className="btn-small accent" onClick={addGym} disabled={!newName.trim()}>Add</button>
           <button className="btn-small" onClick={() => { setEditingId(null); setNewName('') }}>Cancel</button>
         </div>
       ) : (
-        <button className="btn-small accent" style={{ marginTop: 12 }}
+        <button className="btn-small" style={{ marginTop: 'var(--s3)' }}
           onClick={() => setEditingId('new')}>
           + Another gym
         </button>
@@ -443,7 +442,7 @@ function WeeklyPlan({ settings, update }: {
   }
 
   return (
-    <div className="card">
+    <div className="card pane">
       <div className="settings-row">
         <div>
           <div className="k">Sessions per week</div>
@@ -459,9 +458,9 @@ function WeeklyPlan({ settings, update }: {
         </select>
       </div>
 
-      <div className="settings-row" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+      <div className="settings-row stack">
         <div>
-          <div className="k">Your week {plan && <span style={{ color: 'var(--green)' }}>· custom</span>}</div>
+          <div className="k">Your week {plan && <span className="ok">· custom</span>}</div>
           <div className="sub">
             {plan
               ? 'Any day you’ve built can go anywhere. Set every day to Rest to hand the week back to the automatic plan.'
@@ -480,7 +479,7 @@ function WeeklyPlan({ settings, update }: {
           ))}
         </div>
         {plan && (
-          <button className="btn-small" style={{ marginTop: 10 }}
+          <button className="btn-small" style={{ marginTop: 'var(--s3)' }}
             onClick={() => update({ weekPlan: null })}>
             Back to the automatic plan
           </button>
@@ -508,7 +507,7 @@ function RestAlertsRow() {
         </div>
       </div>
       {perm === 'granted'
-        ? <span className="k" style={{ color: 'var(--green)' }}>On ✓</span>
+        ? <span className="micro ok">Enabled</span>
         : <button className="btn-small accent" onClick={enable} disabled={perm === 'denied'}>Enable</button>}
     </div>
   )
@@ -537,9 +536,9 @@ function CustomExercises({ onChanged }: { onChanged: () => Promise<void> }) {
   }
 
   return (
-    <div className="card">
+    <div className="card pane">
       {list.length === 0 && !adding && (
-        <p className="sub" style={{ padding: '4px 0 12px' }}>
+        <p className="sub" style={{ marginBottom: 'var(--s3)' }}>
           Add the machines and variations your gym has. Custom lifts show up as swap and add options,
           and get the same progression and stats as the built-ins.
         </p>
@@ -561,7 +560,7 @@ function CustomExercises({ onChanged }: { onChanged: () => Promise<void> }) {
       {adding ? (
         <ExerciseForm onSave={add} onCancel={() => setAdding(false)} />
       ) : (
-        <button className="btn-small accent" style={{ marginTop: list.length > 0 ? 12 : 0 }}
+        <button className="btn-small" style={{ marginTop: list.length > 0 ? 'var(--s3)' : 0 }}
           onClick={() => setAdding(true)}>
           + New exercise
         </button>
@@ -621,9 +620,9 @@ function ExerciseForm({ onSave, onCancel }: {
         <span>Compound lift (adds warm-up ramps)</span>
       </button>
       <input placeholder="Coaching cue (optional)" value={cue} onChange={(e) => setCue(e.target.value)} />
-      <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+      <div style={{ display: 'flex', gap: 'var(--s2)', marginTop: 'var(--s2)' }}>
         <button className="btn-small" style={{ flex: 1 }} onClick={onCancel}>Cancel</button>
-        <button className="btn-small accent" style={{ flex: 1, opacity: valid ? 1 : 0.4 }}
+        <button className="btn-small accent" style={{ flex: 1 }}
           disabled={!valid} onClick={submit}>Save exercise</button>
       </div>
     </div>
@@ -645,7 +644,7 @@ function TrainingBlock({ settings, update }: {
 
   if (settings.meso && phase) {
     return (
-      <div className="card">
+      <div className="card pane">
         <div className="settings-row">
           <div>
             <div className="k">{phase.label}</div>
@@ -653,7 +652,7 @@ function TrainingBlock({ settings, update }: {
           </div>
           <button className="btn-small" onClick={end}>End block</button>
         </div>
-        <div className="sub" style={{ paddingTop: 8 }}>
+        <div className="sub" style={{ paddingTop: 'var(--s2)' }}>
           Accumulation weeks ramp your prescribed sets; the last week is a planned deload. The block
           rolls into a fresh cycle automatically.
         </div>
@@ -662,21 +661,21 @@ function TrainingBlock({ settings, update }: {
   }
 
   return (
-    <div className="card">
-      <div className="settings-row" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+    <div className="card pane">
+      <div className="settings-row stack">
         <div>
           <div className="k">Run a mesocycle</div>
           <div className="sub">
             Ramp volume week to week, then auto-schedule a deload — structured progression instead of grinding every session.
           </div>
         </div>
-        <div className="seg" role="radiogroup" aria-label="Block length" style={{ marginTop: 12 }}>
+        <div className="seg" role="radiogroup" aria-label="Block length" style={{ marginTop: 'var(--s3)' }}>
           {BLOCK_LENGTHS.map((w) => (
             <button key={w} role="radio" aria-checked={weeks === w}
               className={weeks === w ? 'on' : ''} onClick={() => setWeeks(w)}>{w} wk</button>
           ))}
         </div>
-        <button className="btn-primary" style={{ marginTop: 12 }} onClick={start}>
+        <button className="btn-primary" style={{ marginTop: 'var(--s4)' }} onClick={start}>
           Start {weeks}-week block
         </button>
       </div>
@@ -706,7 +705,7 @@ function Reminders({ settings, update }: {
   }
 
   return (
-    <div className="card">
+    <div className="card pane">
       <div className="settings-row">
         <div>
           <div className="k">Time to train</div>
@@ -717,9 +716,9 @@ function Reminders({ settings, update }: {
       </div>
       {on && (
         <>
-          <div className="settings-row" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+          <div className="settings-row stack">
             <div className="k">Remind me at</div>
-            <div className="seg" role="radiogroup" aria-label="Reminder time" style={{ marginTop: 10 }}>
+            <div className="seg" role="radiogroup" aria-label="Reminder time" style={{ marginTop: 'var(--s3)' }}>
               {REMINDER_HOURS.map((h) => (
                 <button key={h} role="radio" aria-checked={hour === h}
                   className={hour === h ? 'on' : ''} onClick={() => setHour(h)}>{fmtHour(h)}</button>
@@ -801,7 +800,7 @@ function PrivateSyncKey({ onSyncNow }: { onSyncNow: () => Promise<void> }) {
     <div className="settings-row sync-key">
       <div>
         <div className="k">
-          {key ? <>Private backup <span style={{ color: 'var(--green)' }}>· on ✓</span></> : 'Shared public bucket'}
+          {key ? <>Private backup <span className="ok">· on</span></> : 'Shared public bucket'}
         </div>
         <div className="sub">
           {key
@@ -817,10 +816,10 @@ function PrivateSyncKey({ onSyncNow }: { onSyncNow: () => Promise<void> }) {
             <button className="btn-small" onClick={() => setRevealed((r) => !r)}>
               {revealed ? 'Hide' : 'Reveal'}
             </button>
-            <button className="btn-small accent" onClick={copy}>{copied ? 'Copied ✓' : 'Copy'}</button>
+            <button className="btn-small accent" onClick={copy}>{copied ? 'Copied' : 'Copy'}</button>
             <button className="btn-small" onClick={() => setEntering(true)}>Enter a key</button>
           </div>
-          <div className="sub" style={{ marginTop: 8 }}>
+          <div className="sub" style={{ marginTop: 'var(--s2)' }}>
             Keep a copy somewhere safe. Lose it and this device still has your data, but no new
             device can reach the backup.
           </div>
@@ -828,8 +827,8 @@ function PrivateSyncKey({ onSyncNow }: { onSyncNow: () => Promise<void> }) {
       )}
 
       {entering && (
-        <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-          <input style={{ flex: 1 }} placeholder="Paste a key from another device" value={value}
+        <div style={{ display: 'flex', gap: 'var(--s2)', marginTop: 'var(--s3)' }}>
+          <input style={{ flex: 1, minWidth: 0 }} placeholder="Paste a key from another device" value={value}
             onChange={(e) => setValue(e.target.value)} autoFocus />
           <button className="btn-small accent" onClick={() => apply(value)} disabled={value.trim().length < 4}>
             Use it
@@ -846,7 +845,7 @@ function PrivateSyncKey({ onSyncNow }: { onSyncNow: () => Promise<void> }) {
       )}
 
       {key && !entering && (
-        <button className="btn-small danger" style={{ marginTop: 10, alignSelf: 'flex-start' }}
+        <button className="btn-small danger" style={{ marginTop: 'var(--s3)', alignSelf: 'flex-start' }}
           onClick={useShared}>
           Use the shared bucket
         </button>
@@ -877,9 +876,9 @@ function CustomDays({ onChanged }: { onChanged: () => Promise<void> }) {
   }
 
   return (
-    <div className="card">
+    <div className="card pane">
       {list.length === 0 && !adding && (
-        <p className="sub" style={{ padding: '4px 0 12px' }}>
+        <p className="sub" style={{ marginBottom: 'var(--s3)' }}>
           Build your own split — upper/lower, full-body, whatever you run. Custom days appear on Train
           with the same rotation, progression, and stats as the built-ins.
         </p>
@@ -900,7 +899,7 @@ function CustomDays({ onChanged }: { onChanged: () => Promise<void> }) {
       {adding ? (
         <DayForm onSave={add} onCancel={() => setAdding(false)} />
       ) : (
-        <button className="btn-small accent" style={{ marginTop: list.length > 0 ? 12 : 0 }}
+        <button className="btn-small" style={{ marginTop: list.length > 0 ? 'var(--s3)' : 0 }}
           onClick={() => setAdding(true)}>
           + New day
         </button>
@@ -950,11 +949,11 @@ function DayForm({ onSave, onCancel }: {
         <ExercisePicker existing={picks} onPick={(id) => { setPicks((p) => [...p, id]); setPicking(false) }}
           onCancel={() => setPicking(false)} />
       ) : (
-        <button className="btn-ghost" style={{ marginTop: 8 }} onClick={() => setPicking(true)}>+ Add exercise</button>
+        <button className="btn-ghost mt-3" onClick={() => setPicking(true)}>+ Add exercise</button>
       )}
-      <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+      <div style={{ display: 'flex', gap: 'var(--s2)', marginTop: 'var(--s3)' }}>
         <button className="btn-small" style={{ flex: 1 }} onClick={onCancel}>Cancel</button>
-        <button className="btn-small accent" style={{ flex: 1, opacity: valid ? 1 : 0.4 }}
+        <button className="btn-small accent" style={{ flex: 1 }}
           disabled={!valid} onClick={submit}>Save day</button>
       </div>
     </div>

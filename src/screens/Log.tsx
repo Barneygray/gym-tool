@@ -1,12 +1,12 @@
 import { useMemo, useState } from 'react'
 import type { DayId, Session, SetLog } from '../types'
-import { FREESTYLE } from '../types'
+import { FREESTYLE, MOBILITY } from '../types'
 import { exerciseById, getExercise } from '../data/exercises'
 import { DAYS, dayById } from '../data/days'
 import { deleteSession, saveSession, updateSession } from '../db/db'
 import { pushSession } from '../db/sync'
 import { ExercisePicker } from '../components/ExercisePicker'
-import { CloseIcon, TrashIcon } from '../components/Icons'
+import { BookIcon, CloseIcon, TrashIcon } from '../components/Icons'
 
 interface LogProps {
   history: Session[]
@@ -15,8 +15,27 @@ interface LogProps {
 
 function dayName(dayType: Session['dayType']): string {
   if (dayType === 'conditioning') return 'Conditioning'
+  // Mobility sessions have no day template, so they fell through to the raw
+  // id and listed themselves in the log as a lowercase "mobility".
+  if (dayType === MOBILITY) return 'Mobility'
   if (dayType === FREESTYLE) return 'Freestyle'
   return dayById.get(dayType)?.name ?? dayType
+}
+
+/**
+ * The row's detail line, minus the date — the date is its own left-hand column
+ * in the ledger now. Mobility logs no sets at all, so it doesn't get a set
+ * count: it used to read "0 exercises · 0 sets", describing a session that
+ * never happened.
+ */
+function sessionMeta(session: Session, sets: number): string {
+  const n = session.entries.length
+  if (sets === 0) return n > 0 ? plural(n, 'movement') : 'Logged'
+  return `${plural(n, 'exercise')} · ${plural(sets, 'set')}`
+}
+
+function plural(n: number, word: string): string {
+  return `${n} ${word}${n === 1 ? '' : word.endsWith('s') ? 'es' : 's'}`
 }
 
 /** `yyyy-mm-dd` in local time, for `<input type="date">`. */
@@ -51,7 +70,7 @@ export function LogScreen({ history, onChanged }: LogProps) {
   const open = sorted.find((s) => s.uuid === openUuid) ?? null
 
   const addButton = (
-    <button className="btn-ghost" style={{ marginTop: 12 }} onClick={() => setAdding(true)}>
+    <button className="btn-ghost mt-3" onClick={() => setAdding(true)}>
       + Add a past session
     </button>
   )
@@ -59,11 +78,13 @@ export function LogScreen({ history, onChanged }: LogProps) {
   if (history.length === 0) {
     return (
       <>
-        <h1 className="screen-title">Log</h1>
+        <div className="screen-head">
+          <h1 className="screen-title">Log</h1>
+        </div>
         <div className="empty-state">
-          <div className="big">📓</div>
-          No sessions yet.<br />
-          Every workout you finish shows up here — tap one to review or fix it.
+          <div className="big" aria-hidden="true"><BookIcon /></div>
+          No sessions yet. Every workout you finish shows up here — tap one to
+          review or fix it.
         </div>
         {addButton}
         {adding && <AddSession onClose={() => setAdding(false)} onChanged={onChanged} />}
@@ -73,18 +94,25 @@ export function LogScreen({ history, onChanged }: LogProps) {
 
   return (
     <>
-      <h1 className="screen-title">Log</h1>
-      <p className="screen-sub">Every session you’ve logged — tap to review, edit, or delete.</p>
+      <div className="screen-head">
+        <h1 className="screen-title">Log</h1>
+        <span className="micro">{plural(history.length, 'session')}</span>
+      </div>
 
       {sorted.map((s) => {
         const { sets, tonnage } = sessionStats(s)
         return (
           <button key={s.uuid} className="day-card log-card" onClick={() => setOpenUuid(s.uuid)}>
+            {/* Date is its own key column, so dates line up down the page
+                instead of being buried mid-sentence in the detail line. */}
+            <span className="rowkey">{fmtDate(s.startedAt)}</span>
             <div>
               <h3>{dayName(s.dayType)}</h3>
-              <div className="meta">{fmtDate(s.startedAt)} · {s.entries.length} exercises · {sets} sets</div>
+              <div className="meta">{sessionMeta(s, sets)}</div>
             </div>
-            <div className="log-ton num">{formatTonnage(tonnage)}</div>
+            <div className={`log-ton${tonnage <= 0 ? ' none' : ''}`}>
+              {tonnage <= 0 ? '—' : <>{formatTonnage(tonnage)}<span>{tonnage >= 10000 ? 't' : 'kg'}</span></>}
+            </div>
           </button>
         )
       })}
@@ -172,12 +200,14 @@ function AddSession({ onClose, onChanged }: {
       <div className="sheet">
         <div className="sheet-head">
           <div>
-            <h2 className="screen-title" style={{ fontSize: 24 }}>Add a past session</h2>
-            <p className="screen-sub" style={{ marginBottom: 0 }}>
+            <h2 className="sheet-title">Add a past session</h2>
+            <p className="sheet-sub">
               Trained without your phone? Put it in the log so the engine sees it.
             </p>
           </div>
-          <button className="sheet-close" aria-label="Close" onClick={onClose}><CloseIcon /></button>
+          <button className="icon-btn sheet-close" aria-label="Close" onClick={onClose}>
+            <CloseIcon size={20} />
+          </button>
         </div>
 
         <div className="add-session-head">
@@ -224,7 +254,7 @@ function AddSession({ onClose, onChanged }: {
                 </button>
               </div>
             ))}
-            <button className="btn-small" style={{ marginTop: 6 }} onClick={() => addSet(ei)}>+ Set</button>
+            <button className="btn-small" style={{ marginTop: 'var(--s2)' }} onClick={() => addSet(ei)}>+ Set</button>
           </div>
         ))}
 
@@ -236,14 +266,13 @@ function AddSession({ onClose, onChanged }: {
             onCancel={() => setPicking(false)}
           />
         ) : (
-          <button className="btn-ghost" style={{ marginTop: 12 }} onClick={() => setPicking(true)}>
+          <button className="btn-ghost mt-3" onClick={() => setPicking(true)}>
             + Add exercise
           </button>
         )}
 
-        <div style={{ height: 16 }} />
-        <button className="btn-primary" onClick={save} disabled={!valid || saving}
-          style={{ opacity: valid && !saving ? 1 : 0.4 }}>
+        <div style={{ height: 'var(--s4)' }} />
+        <button className="btn-primary" onClick={save} disabled={!valid || saving}>
           Save session
         </button>
       </div>
@@ -304,17 +333,19 @@ function SessionDetail({ session, onClose, onChanged }: {
       <div className="sheet">
         <div className="sheet-head">
           <div>
-            <h2 className="screen-title" style={{ fontSize: 24 }}>{dayName(session.dayType)}</h2>
-            <p className="screen-sub" style={{ marginBottom: 0 }}>{fmtDateLong(session.startedAt)}</p>
+            <h2 className="sheet-title">{dayName(session.dayType)}</h2>
+            <p className="sheet-sub">{fmtDateLong(session.startedAt)}</p>
           </div>
-          <button className="sheet-close" aria-label="Close" onClick={onClose}><CloseIcon /></button>
+          <button className="icon-btn sheet-close" aria-label="Close" onClick={onClose}>
+            <CloseIcon size={20} />
+          </button>
         </div>
 
         {entries.map((entry, ei) => {
           const name = exerciseById.get(entry.exerciseId)?.name ?? entry.exerciseId
           return (
             <div className="log-entry" key={entry.exerciseId + ei}>
-              <div className="section-label" style={{ margin: '16px 0 8px' }}>{name}</div>
+              <div className="section-label" style={{ margin: 'var(--s5) 0 var(--s1)' }}>{name}</div>
               {isConditioning ? (
                 <div className="log-cond num">Logged done</div>
               ) : entry.sets.length === 0 ? (
@@ -345,11 +376,11 @@ function SessionDetail({ session, onClose, onChanged }: {
           )
         })}
 
-        <div style={{ height: 18 }} />
+        <div style={{ height: 'var(--s5)' }} />
         {dirty && !isConditioning && (
           <button className="btn-primary" onClick={save}>Save changes</button>
         )}
-        <button className="btn-ghost danger" style={{ marginTop: 10 }} onClick={remove}>
+        <button className="btn-ghost danger mt-3" onClick={remove}>
           Delete session
         </button>
       </div>
@@ -359,7 +390,7 @@ function SessionDetail({ session, onClose, onChanged }: {
 
 function fmtDate(ts: number): string {
   const d = new Date(ts)
-  return `${d.getDate()} ${d.toLocaleString('en', { month: 'short' })}`
+  return `${String(d.getDate()).padStart(2, '0')} ${d.toLocaleString('en', { month: 'short' })}`
 }
 
 function fmtDateLong(ts: number): string {
@@ -367,7 +398,7 @@ function fmtDateLong(ts: number): string {
   return d.toLocaleDateString('en', { weekday: 'short', day: 'numeric', month: 'long' })
 }
 
+/** The number only — the unit is rendered as its own dimmed span. */
 function formatTonnage(kg: number): string {
-  if (kg <= 0) return '—'
-  return kg >= 10000 ? `${(kg / 1000).toFixed(1)}t` : `${Math.round(kg)} kg`
+  return kg >= 10000 ? (kg / 1000).toFixed(1) : Math.round(kg).toLocaleString()
 }

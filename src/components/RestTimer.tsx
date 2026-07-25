@@ -61,7 +61,7 @@ export function RestTimer({ startedAt, durationSec, soundOn, onDismiss, partner 
       </div>
       <div className="actions">
         {partner && (
-          <button className="btn-small accent" onClick={partner.onGo}>→ {partner.label}</button>
+          <button className="btn-small accent" onClick={partner.onGo}>{partner.label}</button>
         )}
         <button className="btn-small" onClick={onDismiss}>{done ? 'OK' : 'Skip'}</button>
       </div>

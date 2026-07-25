@@ -38,7 +38,7 @@ export function reminderNudge(
   const overdue = rec.overdue.length > 0
   return {
     due,
-    title: overdue ? 'Muscles are going stale 💤' : 'Time to train 💪',
+    title: overdue ? 'Muscles are going stale' : 'Time to train',
     body: `${rec.dayName} is your call today — ${rec.reason}`,
   }
 }
