@@ -151,7 +151,9 @@ export default function App() {
 
   return (
     <div className="app">
-      <main className="app-main">
+      {/* A live session hides the tab bar, so `full` takes back the space
+          reserved for it — the screen used to end in ~100px of nothing. */}
+      <main className={`app-main${inWorkout ? ' full' : ''}`}>
         {inWorkout ? (
           <WorkoutScreen
             active={active}

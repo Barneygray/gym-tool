@@ -5,6 +5,7 @@ import { STRETCH_GROUPS, DESK_RESCUE, type StretchGroup } from '../data/stretche
 import { saveSession } from '../db/db'
 import { pushSession } from '../db/sync'
 import { daysSinceStretched, STALE_AFTER } from '../engine/mobility'
+import { CheckIcon } from '../components/Icons'
 
 interface StretchProps {
   history: Session[]
@@ -84,7 +85,7 @@ export function StretchScreen({ history, onLogged, focus = [] }: StretchProps) {
 
       {selected.size > 0 && (
         <>
-          <div style={{ height: 16 }} />
+          <div style={{ height: 'var(--s5)' }} />
           <button className="btn-primary" onClick={logSelected}>
             Log {selected.size} stretch{selected.size > 1 ? 'es' : ''} done
           </button>
@@ -111,7 +112,8 @@ function GroupBlock({ group, days, highlighted, selected, onToggle }: {
           {days === Infinity ? 'never' : days < 1 ? 'today' : `${Math.floor(days)}d ago`}
         </span>
       </div>
-      <div className={`card${highlighted ? ' focus' : ''}`} style={{ paddingTop: 4, paddingBottom: 4 }}>
+      <div className={`card${highlighted ? ' focus' : ''}`}
+        style={{ paddingTop: 'var(--s1)', paddingBottom: 'var(--s1)' }}>
         {group.stretches.map((s) => {
           const isOn = selected.has(s.id)
           return (
@@ -121,7 +123,6 @@ function GroupBlock({ group, days, highlighted, selected, onToggle }: {
               role="checkbox"
               aria-checked={isOn}
               tabIndex={0}
-              style={{ cursor: 'pointer' }}
               onClick={() => onToggle(s.id)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
@@ -130,14 +131,17 @@ function GroupBlock({ group, days, highlighted, selected, onToggle }: {
                 }
               }}
             >
-              <div className="top">
-                <span className="name" style={isOn ? { color: 'var(--ember)' } : undefined}>
-                  {isOn ? '● ' : ''}{s.name}
-                </span>
-                <span className="hold num">{s.holdSec}s{s.perSide ? ' / side' : ''}</span>
+              {/* A real box. Selection used to be a "● " glued to the front of
+                  the name, which shifted the whole line on every tap. */}
+              <span className="check" aria-hidden="true"><CheckIcon /></span>
+              <div>
+                <div className="top">
+                  <span className="name">{s.name}</span>
+                  <span className="hold num">{s.holdSec}s{s.perSide ? ' / side' : ''}</span>
+                </div>
+                <div className="targets">{s.targets}</div>
+                <div className="cue">{s.cue}</div>
               </div>
-              <div className="targets">{s.targets}</div>
-              <div className="cue">{s.cue}</div>
             </div>
           )
         })}
