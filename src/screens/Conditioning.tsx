@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import type { Session } from '../types'
-import { CONDITIONING } from '../data/conditioning'
+import { CONDITIONING, setsInScheme } from '../data/conditioning'
 import { saveSession } from '../db/db'
 import { pushSession } from '../db/sync'
 import { daysSince } from '../engine/stats'
@@ -49,7 +49,16 @@ export function ConditioningScreen({ history, onLogged }: ConditioningProps) {
       dayType: 'conditioning',
       startedAt: t,
       finishedAt: t,
-      entries: [...selected].map((id) => ({ exerciseId: id, sets: [{ weight: 0, reps: 1 }] })),
+      // Log the scheme's actual set count rather than a single "done" marker,
+      // so a swing session reads as five hard sets of posterior chain in the
+      // weekly volume charts instead of one.
+      entries: [...selected].map((id) => ({
+        exerciseId: id,
+        sets: Array.from(
+          { length: setsInScheme(CONDITIONING.find((m) => m.id === id)?.scheme ?? '') },
+          () => ({ weight: 0, reps: 1 }),
+        ),
+      })),
     }
     await saveSession(session)
     void pushSession(session)
@@ -64,9 +73,10 @@ export function ConditioningScreen({ history, onLogged }: ConditioningProps) {
         Explosive strength and a bulletproof trunk — the base your lifts stand on.
       </p>
 
-      <div className="seg">
+      <div className="seg" role="radiogroup" aria-label="Filter movements">
         {(['all', 'power', 'core', 'spine'] as Filter[]).map((f) => (
-          <button key={f} className={filter === f ? 'on' : ''} onClick={() => setFilter(f)}>
+          <button key={f} role="radio" aria-checked={filter === f}
+            className={filter === f ? 'on' : ''} onClick={() => setFilter(f)}>
             {f === 'all' ? 'All' : PURPOSE_LABEL[f]}
           </button>
         ))}
@@ -78,6 +88,13 @@ export function ConditioningScreen({ history, onLogged }: ConditioningProps) {
           const isOn = selected.has(m.id)
           return (
             <div className="stretch-row cond-row" key={m.id} onClick={() => toggle(m.id)}
+              role="checkbox" aria-checked={isOn} tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  toggle(m.id)
+                }
+              }}
               style={{ cursor: 'pointer' }}>
               <div className="top">
                 <span className="name" style={isOn ? { color: 'var(--ember)' } : undefined}>

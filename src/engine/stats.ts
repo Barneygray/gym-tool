@@ -25,8 +25,52 @@ export function e1rm(weight: number, reps: number): number {
   return weight * (1 + reps / 30)
 }
 
+/**
+ * Beyond this many reps a one-rep-max estimate stops meaning much: the formulas
+ * were fitted on low-rep sets, Epley and Brzycki already disagree by ~9% at 15
+ * reps, and what actually limits a 15-rep set is not the same thing that limits
+ * a single. Most of this catalog tops out at 12–15 reps, so this matters here.
+ *
+ * The estimate is still shown — as a *relative* progress line it's informative
+ * when the rep scheme is steady. What it must not do is settle comparisons
+ * across rep schemes: `prsFor`, `newPRsInSession` and `madeProgress` all gate on
+ * this, so a 15-rep back-off set can't out-rank a heavy triple and declare a PR.
+ */
+export const E1RM_MAX_REPS = 12
+
+export function isReliableE1rm(reps: number): boolean {
+  return reps > 0 && reps <= E1RM_MAX_REPS
+}
+
 export function bestSetE1rm(sets: SetLog[]): number {
   return Math.max(0, ...sets.map((s) => e1rm(s.weight, s.reps)))
+}
+
+/** Best e1RM among sets in the reliable rep window; 0 when none qualify. */
+export function bestReliableE1rm(
+  sets: SetLog[],
+  load: (set: SetLog) => number = (s) => s.weight,
+): number {
+  const usable = sets.filter((s) => isReliableE1rm(s.reps))
+  if (usable.length === 0) return 0
+  return Math.max(0, ...usable.map((s) => e1rm(load(s), s.reps)))
+}
+
+/**
+ * Rep bands a set belongs to. PRs are tracked per band because "best ever" means
+ * something different at 3 reps than at 15, and a single number flattens the two
+ * into a comparison neither of them wins fairly.
+ */
+export const REP_BUCKETS = [
+  { id: 'strength', label: 'Heavy', min: 1, max: 5 },
+  { id: 'hypertrophy', label: 'Moderate', min: 6, max: 12 },
+  { id: 'endurance', label: 'High rep', min: 13, max: Infinity },
+] as const
+
+export type RepBucketId = (typeof REP_BUCKETS)[number]['id']
+
+export function repBucket(reps: number): RepBucketId | null {
+  return REP_BUCKETS.find((b) => reps >= b.min && reps <= b.max)?.id ?? null
 }
 
 export interface E1rmPoint {
@@ -45,30 +89,53 @@ export function e1rmTrend(exerciseId: string, history: Session[], bwAt: Bodyweig
     .reverse()
 }
 
+export interface BucketPR {
+  weight: number
+  reps: number
+  date: number
+}
+
 export interface ExercisePRs {
   maxWeight: { weight: number; reps: number; date: number } | null
   bestE1rm: { value: number; weight: number; reps: number; date: number } | null
+  /** Heaviest load recorded in each rep band — like-for-like bests. */
+  byBucket: Partial<Record<RepBucketId, BucketPR>>
 }
 
 export function prsFor(exerciseId: string, history: Session[], bwAt: BodyweightAt = NO_BW): ExercisePRs {
   let maxWeight: ExercisePRs['maxWeight'] = null
   let bestE1rm: ExercisePRs['bestE1rm'] = null
+  const byBucket: ExercisePRs['byBucket'] = {}
+
   for (const p of performancesOf(exerciseId, history)) {
     for (const s of p.sets) {
       if (s.reps <= 0) continue
       const load = effectiveLoad(exerciseId, s, p.startedAt, bwAt)
       if (load <= 0) continue
+
       if (!maxWeight || load > maxWeight.weight ||
         (load === maxWeight.weight && s.reps > maxWeight.reps)) {
         maxWeight = { weight: load, reps: s.reps, date: p.startedAt }
       }
+
+      const bucket = repBucket(s.reps)
+      if (bucket) {
+        const held = byBucket[bucket]
+        if (!held || load > held.weight || (load === held.weight && s.reps > held.reps)) {
+          byBucket[bucket] = { weight: load, reps: s.reps, date: p.startedAt }
+        }
+      }
+
+      // A high-rep set can't set a 1RM record — the estimate isn't good enough
+      // out there to out-rank a genuinely heavy single or triple.
+      if (!isReliableE1rm(s.reps)) continue
       const est = e1rm(load, s.reps)
       if (!bestE1rm || est > bestE1rm.value) {
         bestE1rm = { value: est, weight: load, reps: s.reps, date: p.startedAt }
       }
     }
   }
-  return { maxWeight, bestE1rm }
+  return { maxWeight, bestE1rm, byBucket }
 }
 
 /** PRs achieved by `session` relative to everything logged before it. */
@@ -91,6 +158,7 @@ export function newPRsInSession(session: Session, history: Session[], bwAt: Body
       if (load > (prior.maxWeight?.weight ?? 0) && load > (bestNewWeight?.load ?? 0)) {
         bestNewWeight = { load, reps: s.reps }
       }
+      if (!isReliableE1rm(s.reps)) continue
       const est = e1rm(load, s.reps)
       if (est > (prior.bestE1rm?.value ?? 0) && est > (bestNewE1rm ? e1rm(bestNewE1rm.load, bestNewE1rm.reps) : 0)) {
         bestNewE1rm = { load, reps: s.reps }

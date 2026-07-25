@@ -8,7 +8,7 @@ import { suggestFor } from '../engine/progression'
 import { recommendDay } from '../engine/coach'
 import { phaseFor } from '../engine/mesocycle'
 import { buildSupersets } from '../engine/superset'
-import { mondayIndex, resolveWeekPlan, shortDayLabel, weeklyPlan } from '../engine/schedule'
+import { dayLabel, mondayIndex, resolveWeekPlan, shortDayLabel, weeklyPlan } from '../engine/schedule'
 import { READINESS_LEVELS, readinessEffect, readinessLabel } from '../engine/readiness'
 import { bodyweightAt } from '../engine/bodyweight'
 import { lastSessionOf } from '../engine/history'
@@ -23,6 +23,7 @@ const MUSCLE_LABEL: Record<Muscle, string> = {
 }
 
 const WEEKDAY_LETTER = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
+const WEEKDAY_FULL = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
 interface TodayProps {
   history: Session[]
@@ -35,12 +36,16 @@ export function TodayScreen({ history, settings, bodyLog, startWorkout }: TodayP
   const [previewDay, setPreviewDay] = useState<DayId | null>(null)
   const now = Date.now()
   const recovery = useMemo(() => recoveryByMuscle(history, now), [history, now])
-  const rec = useMemo(() => recommendDay(history, now), [history, now])
   const phase = useMemo(() => phaseFor(settings.meso, now), [settings.meso, now])
   const bwAt = useMemo(() => bodyweightAt(bodyLog), [bodyLog])
   // The week's layout: a hand-built plan when there is one — custom days
   // included — otherwise the frequency-derived automatic one.
   const slots = useMemo(() => resolveWeekPlan(settings, history), [settings, history])
+  // The coach reads the same plan, so the card and the strip can't disagree.
+  const rec = useMemo(
+    () => recommendDay(history, now, { plan: slots, weekday: mondayIndex(now) }),
+    [history, now, slots],
+  )
   const plan = useMemo(() => weeklyPlan(now, 4, 0, slots), [now, slots])
   const planned = plan.filter((d) => d.dayType).length
   const custom = settings.weekPlan != null
@@ -59,9 +64,10 @@ export function TodayScreen({ history, settings, bodyLog, startWorkout }: TodayP
       )}
 
       <button className="coach-card" onClick={() => setPreviewDay(rec.dayType)}>
-        <div className="coach-kind">Train next</div>
+        <div className="coach-kind">{rec.fromPlan ? 'Today’s plan' : 'Train next'}</div>
         <div className="coach-day">{rec.dayName}</div>
         <div className="coach-why">{rec.reason}</div>
+        {rec.conflict && <div className="coach-conflict">{rec.conflict.note}</div>}
         {rec.overdue.length > 0 && (
           <div className="coach-overdue">
             Overdue: {rec.overdue.slice(0, 4).map((m) => MUSCLE_LABEL[m]).join(' · ')}
@@ -83,9 +89,11 @@ export function TodayScreen({ history, settings, bodyLog, startWorkout }: TodayP
             key={d.weekday}
             className={`plan-day${d.isToday ? ' today' : ''}${d.dayType ? '' : ' rest'}`}
             disabled={!d.dayType}
+            aria-current={d.isToday ? 'date' : undefined}
+            aria-label={`${WEEKDAY_FULL[d.weekday]}${d.isToday ? ' (today)' : ''}: ${d.dayType ? dayLabel(d.dayType) : 'rest day'}`}
             onClick={() => d.dayType && setPreviewDay(d.dayType)}
           >
-            <span className="wd">{WEEKDAY_LETTER[d.weekday]}</span>
+            <span className="wd" aria-hidden="true">{WEEKDAY_LETTER[d.weekday]}</span>
             <span className="pd-name">{d.dayType ? shortDayLabel(d.dayType) : 'Rest'}</span>
             {d.weekday === todayIdx && <span className="pd-today">Today</span>}
           </button>
@@ -250,9 +258,10 @@ function WorkoutPreview({ dayType, history, settings, phase, bwAt, onClose, onSt
         {askReadiness && (
           <div className="readiness">
             <div className="section-label" style={{ marginTop: 0 }}>How are you feeling?</div>
-            <div className="seg">
+            <div className="seg" role="radiogroup" aria-label="How are you feeling?">
               {READINESS_LEVELS.map((level) => (
-                <button key={level} className={readiness === level ? 'on' : ''}
+                <button key={level} role="radio" aria-checked={readiness === level}
+                  className={readiness === level ? 'on' : ''}
                   onClick={() => setReadiness(level)}>
                   {readinessLabel(level)}
                 </button>
