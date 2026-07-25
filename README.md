@@ -27,6 +27,13 @@ tells you exactly what to lift next.
   cage. Setup → Program lets you create custom days (upper/lower, full-body, a
   bro split — whatever you run); they appear on Train with the same rotation,
   progression engine, warm-ups, and stats as the built-ins.
+- **Weekly plan with rest days** — set how many sessions a week you train (Setup →
+  Weekly plan) and the Train screen lays out a Mon–Sun plan, spacing the day
+  templates across training days and marking the rest days between them. Today is
+  highlighted and each planned session is one tap from starting.
+- **Supersets** — link two exercises in the workout preview and the session
+  alternates between them: a superset badge on each, and the rest timer offers a
+  one-tap jump to the paired lift instead of waiting out the clock.
 - **Goals with projections** — set an estimated-1RM target for any lift (Progress
   → Goals) and Forge fits your e1RM trend to project *when* you'll hit it, flags
   whether you're on pace against an optional deadline, and celebrates the goal

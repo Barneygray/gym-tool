@@ -87,3 +87,10 @@ export const CloseIcon = ({ size = 18 }: IconProps) => (
     <path d="M6 6l12 12M18 6 6 18" />
   </svg>
 )
+
+export const LinkIcon = ({ size = 18 }: IconProps) => (
+  <svg {...base(size)}>
+    <path d="M9 12h6" />
+    <path d="M10.5 8H8a4 4 0 0 0 0 8h2.5M13.5 8H16a4 4 0 0 1 0 8h-2.5" />
+  </svg>
+)

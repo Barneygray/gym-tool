@@ -25,6 +25,8 @@ export interface ActiveWorkout {
   exerciseIds: string[]
   logged: Record<string, SetLog[]>
   currentIndex: number
+  /** Exercise-id groups trained as supersets (each group has 2+ ids). */
+  supersets?: string[][]
 }
 
 const ACTIVE_KEY = 'forge-active-workout'
