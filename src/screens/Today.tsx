@@ -1,14 +1,16 @@
 import { useMemo, useState } from 'react'
-import type { DayId, Muscle, Session, Settings } from '../types'
+import type { DayId, DayType, Muscle, Session, Settings } from '../types'
 import { DAYS, dayById } from '../data/days'
 import { EXERCISES, getExercise } from '../data/exercises'
 import { generateWorkout, swapOptions } from '../engine/rotation'
 import { suggestFor } from '../engine/progression'
 import { recommendDay } from '../engine/coach'
 import { phaseFor } from '../engine/mesocycle'
+import { buildSupersets } from '../engine/superset'
+import { clampFrequency, defaultSplit, mondayIndex, rotationStart, weeklyPlan } from '../engine/schedule'
 import { lastSessionOf } from '../engine/history'
 import { recoveryByMuscle, daysSince } from '../engine/stats'
-import { ChevronIcon, CloseIcon, SwapIcon } from '../components/Icons'
+import { ChevronIcon, CloseIcon, LinkIcon, SwapIcon } from '../components/Icons'
 import { formatNum } from '../components/Stepper'
 import type { ActiveWorkout } from '../App'
 
@@ -16,6 +18,11 @@ const MUSCLE_LABEL: Record<Muscle, string> = {
   chest: 'Chest', back: 'Back', shoulders: 'Delts', biceps: 'Biceps', triceps: 'Triceps',
   quads: 'Quads', hamstrings: 'Hams', glutes: 'Glutes', calves: 'Calves', core: 'Core',
 }
+
+const DAY_SHORT: Record<DayType, string> = {
+  push: 'Push', pull: 'Pull', legs: 'Legs', 'shoulders-arms': 'Arms', 'chest-back': 'Ch/Bk',
+}
+const WEEKDAY_LETTER = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
 
 interface TodayProps {
   history: Session[]
@@ -29,6 +36,12 @@ export function TodayScreen({ history, settings, startWorkout }: TodayProps) {
   const recovery = useMemo(() => recoveryByMuscle(history, now), [history, now])
   const rec = useMemo(() => recommendDay(history, now), [history, now])
   const phase = useMemo(() => phaseFor(settings.meso, now), [settings.meso, now])
+  const freq = clampFrequency(settings.weeklyFrequency ?? 4)
+  const plan = useMemo(
+    () => weeklyPlan(now, freq, rotationStart(history, defaultSplit(freq))),
+    [now, freq, history],
+  )
+  const todayIdx = mondayIndex(now)
 
   return (
     <>
@@ -57,6 +70,22 @@ export function TodayScreen({ history, settings, startWorkout }: TodayProps) {
           </div>
         )}
       </button>
+
+      <div className="section-label">This week · {freq}× plan</div>
+      <div className="week-plan">
+        {plan.map((d) => (
+          <button
+            key={d.weekday}
+            className={`plan-day${d.isToday ? ' today' : ''}${d.dayType ? '' : ' rest'}`}
+            disabled={!d.dayType}
+            onClick={() => d.dayType && setPreviewDay(d.dayType)}
+          >
+            <span className="wd">{WEEKDAY_LETTER[d.weekday]}</span>
+            <span className="pd-name">{d.dayType ? DAY_SHORT[d.dayType] : 'Rest'}</span>
+            {d.weekday === todayIdx && <span className="pd-today">Today</span>}
+          </button>
+        ))}
+      </div>
 
       <div className="section-label">Muscle freshness</div>
       <div className="recovery">
@@ -101,13 +130,14 @@ export function TodayScreen({ history, settings, startWorkout }: TodayProps) {
           settings={settings}
           phase={phase}
           onClose={() => setPreviewDay(null)}
-          onStart={(exerciseIds) => {
+          onStart={(exerciseIds, supersets) => {
             startWorkout({
               dayType: previewDay,
               startedAt: Date.now(),
               exerciseIds,
               logged: {},
               currentIndex: 0,
+              supersets,
             })
             setPreviewDay(null)
           }}
@@ -130,10 +160,12 @@ function WorkoutPreview({ dayType, history, settings, phase, onClose, onStart }:
   settings: Settings
   phase: ReturnType<typeof phaseFor>
   onClose: () => void
-  onStart: (exerciseIds: string[]) => void
+  onStart: (exerciseIds: string[], supersets: string[][]) => void
 }) {
   const day = dayById.get(dayType)!
   const [exerciseIds, setExerciseIds] = useState<string[]>(() => generateWorkout(day, history))
+  // Ids "joined" to the exercise directly above them, forming a superset.
+  const [joined, setJoined] = useState<Set<string>>(new Set())
   const [adding, setAdding] = useState(false)
 
   const swap = (index: number) => {
@@ -147,11 +179,34 @@ function WorkoutPreview({ dayType, history, settings, phase, onClose, onStart }:
     })
   }
 
-  const removeAt = (index: number) => setExerciseIds((ids) => ids.filter((_, i) => i !== index))
+  const removeAt = (index: number) => {
+    const removed = exerciseIds[index]
+    setExerciseIds((ids) => ids.filter((_, i) => i !== index))
+    setJoined((j) => {
+      const next = new Set(j)
+      next.delete(removed)
+      // The row that shifts up into this slot can no longer be joined to it.
+      if (exerciseIds[index + 1]) next.delete(exerciseIds[index + 1])
+      return next
+    })
+  }
+
+  const toggleJoin = (id: string) => {
+    setJoined((j) => {
+      const next = new Set(j)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
   const addExercise = (id: string) => {
     setExerciseIds((ids) => (ids.includes(id) ? ids : [...ids, id]))
     setAdding(false)
   }
+
+  const supersets = buildSupersets(exerciseIds, joined)
+  const groupIndexOf = (id: string) => supersets.findIndex((g) => g.includes(id))
 
   return (
     <>
@@ -159,30 +214,47 @@ function WorkoutPreview({ dayType, history, settings, phase, onClose, onStart }:
       <div className="sheet">
         <h2 className="screen-title" style={{ fontSize: 24 }}>{day.name}</h2>
         <p className="screen-sub" style={{ marginBottom: 8 }}>
-          Rotated for fresh stimulus — swap, add, or drop anything.
+          Rotated for fresh stimulus — swap, add, drop, or link two into a superset.
         </p>
         {exerciseIds.map((id, i) => {
           const exercise = getExercise(id)
           const suggestion = suggestFor(exercise, history, settings, phase)
+          const gi = groupIndexOf(id)
+          const linkedUp = joined.has(id) && gi >= 0
           return (
-            <div className="preview-row" key={id}>
-              <div style={{ minWidth: 0 }}>
-                <div className="name">{exercise.name}</div>
-                <div className="detail num">
-                  {suggestion.kind === 'start'
-                    ? `${suggestion.sets} × ${suggestion.targetReps} · find your weight`
-                    : `${suggestion.sets} × ${suggestion.targetReps} @ ${formatNum(suggestion.weight)} kg`}
-                </div>
-              </div>
-              <span className="muscle-tag">{MUSCLE_LABEL[exercise.primary]}</span>
-              <button className="swap-btn" onClick={() => swap(i)} aria-label={`Swap ${exercise.name}`}>
-                <SwapIcon />
-              </button>
-              {exerciseIds.length > 1 && (
-                <button className="swap-btn" onClick={() => removeAt(i)} aria-label={`Remove ${exercise.name}`}>
-                  <CloseIcon size={17} />
+            <div key={id}>
+              {i > 0 && (
+                <button
+                  className={`link-row${linkedUp ? ' on' : ''}`}
+                  onClick={() => toggleJoin(id)}
+                  aria-label={linkedUp ? 'Unlink superset' : `Superset with ${getExercise(exerciseIds[i - 1]).name}`}
+                >
+                  <LinkIcon size={15} />
+                  {linkedUp ? 'Superset' : 'Superset with above'}
                 </button>
               )}
+              <div className={`preview-row${gi >= 0 ? ' in-super' : ''}`}>
+                <div style={{ minWidth: 0 }}>
+                  <div className="name">
+                    {gi >= 0 && <span className="super-tag">SS{gi + 1}</span>}
+                    {exercise.name}
+                  </div>
+                  <div className="detail num">
+                    {suggestion.kind === 'start'
+                      ? `${suggestion.sets} × ${suggestion.targetReps} · find your weight`
+                      : `${suggestion.sets} × ${suggestion.targetReps} @ ${formatNum(suggestion.weight)} kg`}
+                  </div>
+                </div>
+                <span className="muscle-tag">{MUSCLE_LABEL[exercise.primary]}</span>
+                <button className="swap-btn" onClick={() => swap(i)} aria-label={`Swap ${exercise.name}`}>
+                  <SwapIcon />
+                </button>
+                {exerciseIds.length > 1 && (
+                  <button className="swap-btn" onClick={() => removeAt(i)} aria-label={`Remove ${exercise.name}`}>
+                    <CloseIcon size={17} />
+                  </button>
+                )}
+              </div>
             </div>
           )
         })}
@@ -200,7 +272,7 @@ function WorkoutPreview({ dayType, history, settings, phase, onClose, onStart }:
         )}
 
         <div style={{ height: 14 }} />
-        <button className="btn-primary" onClick={() => onStart(exerciseIds)} disabled={exerciseIds.length === 0}
+        <button className="btn-primary" onClick={() => onStart(exerciseIds, supersets)} disabled={exerciseIds.length === 0}
           style={{ opacity: exerciseIds.length === 0 ? 0.4 : 1 }}>
           Start {day.name}
         </button>

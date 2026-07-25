@@ -7,6 +7,7 @@ import {
 import { EXERCISES, makeCustomExercise } from '../data/exercises'
 import { makeCustomDay } from '../data/days'
 import { phaseFor } from '../engine/mesocycle'
+import { clampFrequency, defaultSplit, dayLabel } from '../engine/schedule'
 import { hasPrivateSyncKey, pushSettings, setSyncKey, supabaseConfigured } from '../db/sync'
 import { notificationPermission, notificationsSupported, requestNotifications } from '../notify'
 import { TrashIcon } from '../components/Icons'
@@ -134,6 +135,22 @@ export function SettingsScreen({ settings, onChanged, syncing, onSyncNow, syncEr
 
       <div className="section-label">Training block</div>
       <TrainingBlock settings={settings} update={update} />
+
+      <div className="section-label">Weekly plan</div>
+      <div className="card">
+        <div className="settings-row">
+          <div>
+            <div className="k">Sessions per week</div>
+            <div className="sub">
+              Lays out your week as {defaultSplit(settings.weeklyFrequency ?? 4).map(dayLabel).join(' · ')}
+            </div>
+          </div>
+          <select value={clampFrequency(settings.weeklyFrequency ?? 4)}
+            onChange={(e) => update({ weeklyFrequency: Number(e.target.value) })}>
+            {[2, 3, 4, 5, 6].map((n) => <option key={n} value={n}>{n}×</option>)}
+          </select>
+        </div>
+      </div>
 
       <div className="section-label">Reminders</div>
       <Reminders settings={settings} update={update} />

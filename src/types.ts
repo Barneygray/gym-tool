@@ -90,6 +90,8 @@ export interface Settings {
   meso?: MesoConfig | null
   /** Daily "time to train" nudge. Absent = off. */
   reminder?: ReminderConfig | null
+  /** Target gym sessions per week; drives the weekly plan. Absent = default (4). */
+  weeklyFrequency?: number
 }
 
 /**

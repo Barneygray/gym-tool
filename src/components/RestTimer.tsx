@@ -7,9 +7,11 @@ interface RestTimerProps {
   durationSec: number
   soundOn: boolean
   onDismiss: () => void
+  /** When set, a superset partner to jump straight to instead of waiting. */
+  partner?: { label: string; onGo: () => void }
 }
 
-export function RestTimer({ startedAt, durationSec, soundOn, onDismiss }: RestTimerProps) {
+export function RestTimer({ startedAt, durationSec, soundOn, onDismiss, partner }: RestTimerProps) {
   const [now, setNow] = useState(Date.now())
   const beeped = useRef(false)
 
@@ -55,9 +57,12 @@ export function RestTimer({ startedAt, durationSec, soundOn, onDismiss }: RestTi
       </svg>
       <div>
         <div className="time num">{done ? 'GO' : `${mm}:${String(ss).padStart(2, '0')}`}</div>
-        <div className="sub">{done ? 'Rested — next set' : 'Resting'}</div>
+        <div className="sub">{partner ? `Superset — then ${partner.label}` : done ? 'Rested — next set' : 'Resting'}</div>
       </div>
       <div className="actions">
+        {partner && (
+          <button className="btn-small accent" onClick={partner.onGo}>→ {partner.label}</button>
+        )}
         <button className="btn-small" onClick={onDismiss}>{done ? 'OK' : 'Skip'}</button>
       </div>
     </div>

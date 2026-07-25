@@ -13,6 +13,7 @@ import { pushSession } from '../db/sync'
 import { useWakeLock } from '../hooks/useWakeLock'
 import { Stepper, formatNum } from '../components/Stepper'
 import { RestTimer } from '../components/RestTimer'
+import { nextPartner } from '../engine/superset'
 import { BackIcon, TrashIcon } from '../components/Icons'
 import type { ActiveWorkout } from '../App'
 
@@ -43,6 +44,14 @@ export function WorkoutScreen({ active, setActive, history, settings, bodyLog, o
   const phase = useMemo(() => phaseFor(settings.meso, active.startedAt), [settings.meso, active.startedAt])
   const suggestion = useMemo(() => suggestFor(exercise, history, settings, phase), [exercise, history, settings, phase])
   const loggedSets = active.logged[exercise.id] ?? []
+
+  // Superset: the group this exercise belongs to, and the partner to alternate
+  // to next (the group member with the fewest logged sets so far).
+  const superset = active.supersets?.find((g) => g.includes(exercise.id)) ?? null
+  const partnerId = useMemo(
+    () => nextPartner(superset, exercise.id, active.logged),
+    [superset, exercise.id, active.logged],
+  )
 
   const [weight, setWeight] = useState(0)
   const [reps, setReps] = useState(0)
@@ -134,6 +143,14 @@ export function WorkoutScreen({ active, setActive, history, settings, bodyLog, o
     }
   }
 
+  const goToId = (id: string) => {
+    const idx = active.exerciseIds.indexOf(id)
+    if (idx >= 0) {
+      setActive({ ...active, currentIndex: idx })
+      setRest(null)
+    }
+  }
+
   const finish = async () => {
     const entries = active.exerciseIds
       .map((id) => ({ exerciseId: id, sets: active.logged[id] ?? [] }))
@@ -179,7 +196,14 @@ export function WorkoutScreen({ active, setActive, history, settings, bodyLog, o
       </div>
 
       <h1 className="screen-title" style={{ fontSize: 24 }}>{exercise.name}</h1>
-      <p className="screen-sub" style={{ marginBottom: 14 }}>{exercise.cue}</p>
+      <p className="screen-sub" style={{ marginBottom: superset ? 8 : 14 }}>{exercise.cue}</p>
+
+      {superset && (
+        <div className="super-banner">
+          Superset · alternate with{' '}
+          {superset.filter((id) => id !== exercise.id).map((id) => getExercise(id).name).join(', ')}
+        </div>
+      )}
 
       <div className={`suggestion ${suggestion.kind}`}>
         <div className="kind">{KIND_LABEL[suggestion.kind]}</div>
@@ -289,6 +313,7 @@ export function WorkoutScreen({ active, setActive, history, settings, bodyLog, o
           durationSec={rest.durationSec}
           soundOn={settings.soundOn}
           onDismiss={() => setRest(null)}
+          partner={partnerId ? { label: getExercise(partnerId).name, onGo: () => goToId(partnerId) } : undefined}
         />
       )}
     </>
