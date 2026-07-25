@@ -88,6 +88,9 @@ export function suggestFor(
       weight: deloaded,
       targetReps: lo,
       sets,
+      // A stall is the one case where changing the exercise is real advice, so
+      // the UI can offer it as a button instead of only mentioning it in prose.
+      offerSwap: true,
       reason: carried
         ? `Stalled 3 sessions at ${fmt(topWeight)} kg added, bodyweight counted. Back off to ${fmt(deloaded)} kg and rebuild — or swap to a sibling variation.`
         : `Stalled 3 sessions at ${fmt(topWeight)} kg. Deload to ${fmt(deloaded)} kg and rebuild — or swap to a sibling variation.`,

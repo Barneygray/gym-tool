@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import type { DayId, DaySlot, DayTemplate, Equipment, Exercise, Muscle, Settings, WeekPlan } from '../types'
+import type {
+  DayId, DaySlot, DayTemplate, Equipment, EquipmentProfile, Exercise, Muscle, Settings, WeekPlan,
+} from '../types'
 import {
   deleteCustomDay, deleteCustomExercise, exportData, getCustomDays, getCustomExercises,
   getRestoreSnapshot, importData, parseBackup, saveCustomDay, saveCustomExercise, saveSettings,
@@ -10,6 +12,9 @@ import { EXERCISES, makeCustomExercise } from '../data/exercises'
 import { makeCustomDay } from '../data/days'
 import { phaseFor } from '../engine/mesocycle'
 import { autoWeekPlan, clampFrequency, defaultSplit, dayLabel } from '../engine/schedule'
+import {
+  PLATE_PRESETS, activeProfile, makeProfile, parsePlates, profilesOf,
+} from '../engine/equipment'
 import {
   generateSyncKey, getSyncKey, pushRecord, pushSettings, setSyncKey, supabaseConfigured,
 } from '../db/sync'
@@ -41,7 +46,6 @@ interface SettingsProps {
 }
 
 export function SettingsScreen({ settings, onChanged, syncing, onSyncNow, syncError }: SettingsProps) {
-  const [platesText, setPlatesText] = useState(settings.platesKg.join(', '))
   const [status, setStatus] = useState<string | null>(null)
   const [undoable, setUndoable] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -56,19 +60,6 @@ export function SettingsScreen({ settings, onChanged, syncing, onSyncNow, syncEr
     await saveSettings(next)
     void pushSettings(next)
     await onChanged()
-  }
-
-  const savePlates = async () => {
-    const plates = platesText
-      .split(/[,\s]+/)
-      .map(Number)
-      .filter((n) => Number.isFinite(n) && n > 0)
-      .sort((a, b) => b - a)
-    if (plates.length > 0) {
-      await update({ platesKg: plates })
-      setPlatesText(plates.join(', '))
-      flash('Plates saved')
-    }
   }
 
   const flash = (msg: string) => {
@@ -145,26 +136,10 @@ export function SettingsScreen({ settings, onChanged, syncing, onSyncNow, syncEr
       <p className="screen-sub">Your gym, your bar, your data.</p>
 
       <div className="section-label">Equipment</div>
+      <Gyms settings={settings} update={update} />
+
+      <div className="section-label">Rest timer</div>
       <div className="card">
-        <div className="settings-row">
-          <div>
-            <div className="k">Bar weight</div>
-            <div className="sub">Used for plate math and warm-ups</div>
-          </div>
-          <input type="number" inputMode="decimal" value={settings.barWeightKg}
-            onChange={(e) => update({ barWeightKg: Number(e.target.value) || 20 })} />
-        </div>
-        <div className="settings-row" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
-          <div>
-            <div className="k">Plates available (kg, per side)</div>
-            <div className="sub">Comma separated — determines loadable weights</div>
-          </div>
-          <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-            <input style={{ flex: 1 }} value={platesText}
-              onChange={(e) => setPlatesText(e.target.value)} onBlur={savePlates} />
-            <button className="btn-small accent" onClick={savePlates}>Save</button>
-          </div>
-        </div>
         <div className="settings-row">
           <div>
             <div className="k">Rest timer sound</div>
@@ -289,6 +264,158 @@ export function SettingsScreen({ settings, onChanged, syncing, onSyncNow, syncEr
         </p>
       )}
     </>
+  )
+}
+
+// ── Gyms (equipment profiles) ───────────────────────────
+/**
+ * Bar weight and plates aren't a preference, they're a description of the room
+ * you're standing in: they decide what `roundToLoadable` will ever suggest and
+ * what the plate hint shows. A single global pair only ever describes one gym,
+ * so travelling — or having a rack at home as well — silently produced target
+ * weights that couldn't be loaded.
+ */
+function Gyms({ settings, update }: {
+  settings: Settings
+  update: (patch: Partial<Settings>) => Promise<void>
+}) {
+  const profiles = profilesOf(settings)
+  const active = activeProfile(settings)
+  const [platesText, setPlatesText] = useState(active.platesKg.join(', '))
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [newName, setNewName] = useState('')
+
+  /** Write a profile back, keeping the mirrored flat fields in step. */
+  const writeProfile = (next: EquipmentProfile) => {
+    const list = profiles.map((p) => (p.id === next.id ? next : p))
+    return update({
+      profiles: list,
+      activeProfileId: next.id,
+      ...(next.id === settings.activeProfileId || profiles.length === 1
+        ? { barWeightKg: next.barWeightKg, platesKg: next.platesKg }
+        : {}),
+    })
+  }
+
+  const switchTo = (id: string) => {
+    const target = profiles.find((p) => p.id === id)
+    if (!target) return
+    setPlatesText(target.platesKg.join(', '))
+    return update({
+      profiles,
+      activeProfileId: id,
+      barWeightKg: target.barWeightKg,
+      platesKg: target.platesKg,
+    })
+  }
+
+  const savePlates = () => {
+    const plates = parsePlates(platesText)
+    if (plates.length === 0) return
+    setPlatesText(plates.join(', '))
+    return writeProfile({ ...active, platesKg: plates })
+  }
+
+  const addGym = async () => {
+    const name = newName.trim()
+    if (!name) return
+    const created = makeProfile({ name, barWeightKg: active.barWeightKg, platesKg: active.platesKg })
+    setNewName('')
+    setEditingId(null)
+    setPlatesText(created.platesKg.join(', '))
+    await update({
+      profiles: [...profiles, created],
+      activeProfileId: created.id,
+      barWeightKg: created.barWeightKg,
+      platesKg: created.platesKg,
+    })
+  }
+
+  const removeGym = async (id: string) => {
+    if (profiles.length <= 1) return
+    if (!window.confirm('Delete this gym? Sessions logged there are kept.')) return
+    const list = profiles.filter((p) => p.id !== id)
+    const next = list[0]
+    setPlatesText(next.platesKg.join(', '))
+    await update({
+      profiles: list,
+      activeProfileId: next.id,
+      barWeightKg: next.barWeightKg,
+      platesKg: next.platesKg,
+    })
+  }
+
+  return (
+    <div className="card">
+      {profiles.length > 1 && (
+        <div className="settings-row" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+          <div>
+            <div className="k">Training at</div>
+            <div className="sub">Switch gyms and every suggestion re-rounds to what’s on the rack.</div>
+          </div>
+          <div className="gym-list">
+            {profiles.map((p) => (
+              <div className="gym-row" key={p.id}>
+                <button className={`gym-pick${p.id === active.id ? ' on' : ''}`}
+                  role="radio" aria-checked={p.id === active.id} onClick={() => switchTo(p.id)}>
+                  <span className="gname">{p.name}</span>
+                  <span className="gdetail num">{p.barWeightKg} kg bar · {p.platesKg.join(', ')}</span>
+                </button>
+                <button className="set-del" aria-label={`Delete ${p.name}`} onClick={() => removeGym(p.id)}>
+                  <TrashIcon size={16} />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="settings-row">
+        <div>
+          <div className="k">Bar weight{profiles.length > 1 ? ` — ${active.name}` : ''}</div>
+          <div className="sub">Used for plate math and warm-ups</div>
+        </div>
+        <input type="number" inputMode="decimal" value={active.barWeightKg}
+          onChange={(e) => writeProfile({ ...active, barWeightKg: Number(e.target.value) || 20 })} />
+      </div>
+
+      <div className="settings-row" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+        <div>
+          <div className="k">Plates available (kg, per side)</div>
+          <div className="sub">Comma separated — determines every loadable weight</div>
+        </div>
+        <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+          <input style={{ flex: 1 }} value={platesText}
+            onChange={(e) => setPlatesText(e.target.value)} onBlur={savePlates} />
+          <button className="btn-small accent" onClick={savePlates}>Save</button>
+        </div>
+        <div className="ob-presets" style={{ marginTop: 10 }}>
+          {PLATE_PRESETS.map((preset) => (
+            <button key={preset.name} className="btn-small"
+              onClick={() => {
+                setPlatesText(preset.platesKg.join(', '))
+                void writeProfile({ ...active, barWeightKg: preset.barWeightKg, platesKg: preset.platesKg })
+              }}>
+              {preset.name}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {editingId === 'new' ? (
+        <div style={{ display: 'flex', gap: 8, padding: '12px 0 2px' }}>
+          <input style={{ flex: 1 }} autoFocus placeholder="Gym name — e.g. Hotel gym"
+            value={newName} onChange={(e) => setNewName(e.target.value)} />
+          <button className="btn-small accent" onClick={addGym} disabled={!newName.trim()}>Add</button>
+          <button className="btn-small" onClick={() => { setEditingId(null); setNewName('') }}>Cancel</button>
+        </div>
+      ) : (
+        <button className="btn-small accent" style={{ marginTop: 12 }}
+          onClick={() => setEditingId('new')}>
+          + Another gym
+        </button>
+      )}
+    </div>
   )
 }
 

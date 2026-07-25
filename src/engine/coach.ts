@@ -2,6 +2,7 @@ import type { DayId, Muscle, Session, WeekPlan } from '../types'
 import { DAYS, dayById } from '../data/days'
 import { recoveryByMuscle } from './stats'
 import { MUSCLE_TARGETS, underVolumeMuscles, weeklySetsByMuscle } from './volume'
+import { staleGroups } from './mobility'
 
 export interface DayRecommendation {
   dayType: DayId
@@ -12,6 +13,8 @@ export interface DayRecommendation {
   overdue: Muscle[]
   /** Muscles trained this week but below their minimum effective volume. */
   underVolume: Muscle[]
+  /** Stretch groups gone stale for muscles actually being trained. */
+  staleMobility: string[]
   /** True when this is the day the week's plan schedules for today. */
   fromPlan: boolean
   /**
@@ -67,6 +70,7 @@ export function recommendDay(
         .sort((a, b) => b[1] - a[1])
         .map(([m]) => m)
   const underVolume = fresh ? [] : underVolumeMuscles(history, now)
+  const staleMobility = fresh ? [] : staleGroups(history, now)
 
   const restedness = (day: { muscles: Muscle[] }) =>
     day.muscles.reduce((sum, m) => sum + Math.min(daysFor(m), CAP), 0) / day.muscles.length
@@ -104,6 +108,7 @@ export function recommendDay(
       reason: fresh ? 'First session of the plan — a clean place to start.' : topTwo(planned.muscles),
       overdue,
       underVolume,
+      staleMobility,
       fromPlan: true,
       conflict,
     }
@@ -123,6 +128,7 @@ export function recommendDay(
     reason: fresh ? 'Everything’s fresh — a clean place to start.' : topTwo(best.muscles),
     overdue,
     underVolume,
+    staleMobility,
     fromPlan: false,
     conflict: null,
   }

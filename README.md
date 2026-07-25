@@ -5,6 +5,11 @@ tells you exactly what to lift next.
 
 ## What it does
 
+- **Set up in four taps** — a first run asks for bodyweight, your bar and plates,
+  and how often you train, so pull-up stats, plate math and the weekly plan are
+  accurate from session one instead of sitting on defaults until you find Setup.
+  Skippable, and everything is editable later.
+
 - **Five gym days** — Push, Pull, Legs, Shoulders & Arms, Chest & Back — each
   with a curated pool of 2–3 exercises per muscle group. Variations rotate
   automatically between sessions for a varied growth stimulus, and any pick can
@@ -57,6 +62,16 @@ tells you exactly what to lift next.
 - **Time-to-train reminders** — opt into a daily nudge (Setup → Reminders) and,
   if you haven't trained by your chosen hour, Forge notifies you with the exact
   day the coach would pick next.
+- **A profile per gym** — bar weight and plates aren't a preference, they describe
+  the room you're standing in: they decide every loadable weight the engine will
+  ever suggest. Setup → Equipment keeps a named profile per gym (home rack, hotel,
+  the good one with the 1.25s) and a one-tap switcher sits on Train, so travelling
+  no longer means being prescribed weights you can't load. Sessions record where
+  they were trained.
+- **See your own history mid-set** — the exercise screen opens the last three
+  sessions on that lift in full: every set, the RPE you tagged, and the notes you
+  left yourself. When a lift stalls, the suggestion's "swap to a variation" is a
+  button, not just advice.
 - **Smart in-workout tools** — warm-up ramps for compounds, per-side plate math,
   auto-starting rest timer with chime/vibration, per-set RPE and notes. The
   timer holds a screen wake lock so the phone won't sleep mid-set, and (opt-in
@@ -96,7 +111,12 @@ tells you exactly what to lift next.
   other bodyweight-loaded moves fold bodyweight-at-the-time into their e1RM, PRs,
   and tonnage instead of counting only the added plate.
 - **Stretch tab** — key holds per muscle group, plus a *Desk Rescue* section for
-  lower back, tech neck, and hips.
+  lower back, tech neck, and hips. Holds are loggable and each group shows when
+  you last did it, so neglect is visible; the coach names groups gone stale for
+  muscles you're actually training, and finishing a session offers the holds for
+  what you just trained — warm, done, phone already in hand. Mobility is tracked
+  for staleness only: a stretch is not a hard set and never counts as volume,
+  tonnage, or a training session.
 - **Usable with a screen reader** — the custom switches, segmented pickers, RPE
   row, weekday strip and steppers carry proper `switch`/`radio`/`checkbox`
   semantics and accessible names, so their state is announced rather than being
@@ -123,6 +143,11 @@ tells you exactly what to lift next.
 
 Vite + React + TypeScript, Dexie (IndexedDB), hand-rolled SVG charts,
 vite-plugin-pwa. No backend, no accounts.
+
+The bundle is split so the Train screen paints first: React and Dexie sit in
+their own long-lived chunks, each tab loads on demand, and the Supabase client
+is fetched only when sync actually runs — it's a background job, and it used to
+sit in front of the first render.
 
 ## Develop
 

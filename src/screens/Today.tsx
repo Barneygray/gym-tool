@@ -11,6 +11,10 @@ import { buildSupersets } from '../engine/superset'
 import { dayLabel, mondayIndex, resolveWeekPlan, shortDayLabel, weeklyPlan } from '../engine/schedule'
 import { READINESS_LEVELS, readinessEffect, readinessLabel } from '../engine/readiness'
 import { bodyweightAt } from '../engine/bodyweight'
+import { activeProfile, profilesOf } from '../engine/equipment'
+import { groupNames } from '../engine/mobility'
+import { saveSettings } from '../db/db'
+import { pushSettings } from '../db/sync'
 import { lastSessionOf } from '../engine/history'
 import { recoveryByMuscle, daysSince } from '../engine/stats'
 import { ChevronIcon, CloseIcon, LinkIcon, SwapIcon } from '../components/Icons'
@@ -30,9 +34,10 @@ interface TodayProps {
   settings: Settings
   bodyLog: BodyLog[]
   startWorkout: (w: ActiveWorkout) => void
+  onChanged: () => Promise<void>
 }
 
-export function TodayScreen({ history, settings, bodyLog, startWorkout }: TodayProps) {
+export function TodayScreen({ history, settings, bodyLog, startWorkout, onChanged }: TodayProps) {
   const [previewDay, setPreviewDay] = useState<DayId | null>(null)
   const now = Date.now()
   const recovery = useMemo(() => recoveryByMuscle(history, now), [history, now])
@@ -78,7 +83,14 @@ export function TodayScreen({ history, settings, bodyLog, startWorkout }: TodayP
             Low volume this week: {rec.underVolume.slice(0, 4).map((m) => MUSCLE_LABEL[m]).join(' · ')}
           </div>
         )}
+        {rec.staleMobility.length > 0 && (
+          <div className="coach-overdue">
+            Not stretched lately: {groupNames(rec.staleMobility.slice(0, 2)).join(' · ')}
+          </div>
+        )}
       </button>
+
+      <GymSwitcher settings={settings} onChanged={onChanged} />
 
       <div className="section-label">
         This week · {planned}× {custom ? 'your plan' : 'auto plan'}
@@ -178,6 +190,43 @@ export function TodayScreen({ history, settings, bodyLog, startWorkout }: TodayP
         />
       )}
     </>
+  )
+}
+
+
+/**
+ * Only appears once there's more than one gym. Switching re-points plate math,
+ * warm-up rungs and every rounded suggestion at the rack you're actually
+ * standing in front of — so it belongs one tap from starting a session, not
+ * buried three screens deep in Setup.
+ */
+function GymSwitcher({ settings, onChanged }: { settings: Settings; onChanged: () => Promise<void> }) {
+  const profiles = profilesOf(settings)
+  if (profiles.length < 2) return null
+  const active = activeProfile(settings)
+
+  const switchTo = async (id: string) => {
+    const target = profiles.find((p) => p.id === id)
+    if (!target || target.id === active.id) return
+    const next = await saveSettings({
+      ...settings,
+      activeProfileId: target.id,
+      barWeightKg: target.barWeightKg,
+      platesKg: target.platesKg,
+    })
+    void pushSettings(next)
+    await onChanged()
+  }
+
+  return (
+    <div className="gym-switch seg" role="radiogroup" aria-label="Training at">
+      {profiles.map((p) => (
+        <button key={p.id} role="radio" aria-checked={p.id === active.id}
+          className={p.id === active.id ? 'on' : ''} onClick={() => switchTo(p.id)}>
+          {p.name}
+        </button>
+      ))}
+    </div>
   )
 }
 

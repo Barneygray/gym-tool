@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js'
+import type { SupabaseClient } from '@supabase/supabase-js'
 
 /**
  * Both values are meant to be public — Supabase's anon key only grants what
@@ -12,8 +12,21 @@ const SUPABASE_ANON_KEY =
 
 export const supabaseConfigured = SUPABASE_URL.length > 0 && SUPABASE_ANON_KEY.length > 0
 
-export const supabase = supabaseConfigured
-  ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+/**
+ * The client is loaded on demand rather than imported eagerly. Sync is a
+ * background job that runs *after* the first render, but a static import put
+ * the whole Supabase library — comfortably the heaviest dependency here — in
+ * front of the Train screen painting. This is a phone-first PWA opened on gym
+ * wifi mid-session; that cost lands in exactly the wrong place.
+ */
+let clientPromise: Promise<SupabaseClient | null> | null = null
+
+export function getSupabase(): Promise<SupabaseClient | null> {
+  if (!supabaseConfigured) return Promise.resolve(null)
+  clientPromise ??= import('@supabase/supabase-js').then(({ createClient }) =>
+    createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       auth: { persistSession: true, detectSessionInUrl: true },
-    })
-  : null
+    }),
+  )
+  return clientPromise
+}

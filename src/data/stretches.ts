@@ -1,4 +1,4 @@
-import type { Stretch } from '../types'
+import type { Muscle, Stretch } from '../types'
 
 const st = (
   id: string,
@@ -12,6 +12,8 @@ const st = (
 export interface StretchGroup {
   id: string
   name: string
+  /** Muscles this group serves, so a finished session can offer the right holds. */
+  muscles: Muscle[]
   stretches: Stretch[]
 }
 
@@ -20,6 +22,7 @@ export const STRETCH_GROUPS: StretchGroup[] = [
   {
     id: 'chest-shoulders',
     name: 'Chest & Shoulders',
+    muscles: ['chest', 'shoulders'],
     stretches: [
       st('doorway-pec', 'Doorway Pec Stretch', 'Chest, front delts', 30, true,
         'Forearm on the frame, elbow at shoulder height, step through until you feel the chest open.'),
@@ -32,6 +35,7 @@ export const STRETCH_GROUPS: StretchGroup[] = [
   {
     id: 'back-lats',
     name: 'Back & Lats',
+    muscles: ['back'],
     stretches: [
       st('lat-hang', 'Bar Lat Hang', 'Lats, spine decompression', 30, false,
         'Dead hang from a bar, relax the shoulders up to your ears and breathe.'),
@@ -44,6 +48,7 @@ export const STRETCH_GROUPS: StretchGroup[] = [
   {
     id: 'arms',
     name: 'Arms & Wrists',
+    muscles: ['biceps', 'triceps'],
     stretches: [
       st('wall-biceps', 'Wall Biceps Stretch', 'Biceps, forearm', 30, true,
         'Palm flat on the wall behind you, fingers back, turn your chest away.'),
@@ -56,6 +61,7 @@ export const STRETCH_GROUPS: StretchGroup[] = [
   {
     id: 'legs-glutes',
     name: 'Legs & Glutes',
+    muscles: ['quads', 'hamstrings', 'glutes', 'calves'],
     stretches: [
       st('couch-quad', 'Couch Quad Stretch', 'Quads, hip flexors', 45, true,
         'Rear foot up on a bench or wall, knee down, squeeze the glute and stay tall.'),
@@ -76,6 +82,7 @@ export const DESK_RESCUE: StretchGroup[] = [
   {
     id: 'lower-back',
     name: 'Lower Back Reset',
+    muscles: ['back', 'core'],
     stretches: [
       st('cat-cow', 'Cat–Cow', 'Whole spine mobility', 45, false,
         'On all fours, alternate slowly between arching and rounding — move with the breath.'),
@@ -90,6 +97,7 @@ export const DESK_RESCUE: StretchGroup[] = [
   {
     id: 'upper-back-neck',
     name: 'Upper Back & Tech Neck',
+    muscles: ['back', 'shoulders'],
     stretches: [
       st('chin-tuck', 'Chin Tucks', 'Deep neck flexors', 30, false,
         'Glide the chin straight back to make a double chin, hold two counts, repeat.'),
@@ -106,6 +114,7 @@ export const DESK_RESCUE: StretchGroup[] = [
   {
     id: 'legs-hips',
     name: 'Legs & Hips (Sitting Antidote)',
+    muscles: ['quads', 'hamstrings', 'glutes'],
     stretches: [
       st('worlds-greatest', "World's Greatest Stretch", 'Hips, hamstrings, thoracic', 40, true,
         'Deep lunge, inside hand down, rotate the other arm to the ceiling.'),
@@ -118,3 +127,13 @@ export const DESK_RESCUE: StretchGroup[] = [
     ],
   },
 ]
+
+/** Every stretch group, training-focused and desk-focused alike. */
+export const ALL_STRETCH_GROUPS: StretchGroup[] = [...STRETCH_GROUPS, ...DESK_RESCUE]
+
+export const stretchGroupById = new Map(ALL_STRETCH_GROUPS.map((g) => [g.id, g]))
+
+/** The group a stretch belongs to — mobility logs record individual stretches. */
+export const groupIdOfStretch = new Map(
+  ALL_STRETCH_GROUPS.flatMap((g) => g.stretches.map((st) => [st.id, g.id] as const)),
+)

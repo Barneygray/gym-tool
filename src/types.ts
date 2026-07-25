@@ -30,8 +30,11 @@ export interface SyncMeta {
  */
 export type DayId = DayType | (string & {})
 
-/** Sessions cover gym days plus logged conditioning work. */
-export type SessionKind = DayId | 'conditioning'
+/** Sessions cover gym days plus logged conditioning and mobility work. */
+export type SessionKind = DayId | 'conditioning' | 'mobility'
+
+/** Logged stretching. Tracked for staleness, deliberately not for volume. */
+export const MOBILITY = 'mobility'
 
 /**
  * The pseudo-day for an unplanned session: no template, no prescribed
@@ -94,6 +97,8 @@ export interface Session extends SyncMeta {
   entries: SessionEntry[]
   /** How the trainee rated their readiness before starting. Absent = not asked. */
   readiness?: ReadinessLevel
+  /** Which gym this was logged at, for provenance. */
+  profileId?: string
 }
 
 /** One bodyweight reading, keyed by start-of-day epoch (one entry per day). */
@@ -109,12 +114,39 @@ export interface BodyLog extends SyncMeta {
  */
 export type WeekPlan = (DayId | null)[]
 
+/**
+ * A gym's equipment. Bar weight and plate denominations decide what weights are
+ * actually loadable, which is why they drive plate math, warm-up rungs and the
+ * rounding of every barbell suggestion. One global pair only ever describes one
+ * gym; travel, or train at home as well, and the numbers quietly stop matching
+ * the room you're standing in.
+ */
+export interface EquipmentProfile {
+  id: string
+  name: string
+  barWeightKg: number
+  /** Plate denominations available, per side, in kg. */
+  platesKg: number[]
+  /** Exercise ids this gym can't do — hidden from pickers and rotation. */
+  unavailable?: string[]
+}
+
 export interface Settings extends SyncMeta {
   id: string
+  /**
+   * The active profile's equipment, mirrored here so every engine keeps reading
+   * one obvious place. `applyActiveProfile` keeps these in step; with no
+   * profiles configured they're simply the only equipment there is.
+   */
   barWeightKg: number
   /** Plate denominations available, per side, in kg. */
   platesKg: number[]
   soundOn: boolean
+  /** Named gyms. Absent/empty = a single implicit profile from the fields above. */
+  profiles?: EquipmentProfile[]
+  activeProfileId?: string
+  /** Set once the first-run flow has been completed or skipped. */
+  onboardedAt?: number
   /** Active training block. null/absent = no periodization (session-to-session). */
   meso?: MesoConfig | null
   /** Daily "time to train" nudge. Absent = off. */
@@ -156,6 +188,8 @@ export interface Suggestion {
   /** Human explanation of why this target was chosen. */
   reason: string
   kind: 'increase' | 'build' | 'start' | 'deload'
+  /** Set on a stall, where swapping to a sibling variation is real advice. */
+  offerSwap?: boolean
 }
 
 export interface DaySlot {

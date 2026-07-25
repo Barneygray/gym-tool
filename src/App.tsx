@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { BodyLog, DayId, Goal, ReadinessLevel, Session, SetLog, Settings } from './types'
 import {
   DEFAULT_SETTINGS, getBodyLog, getGoals, getHistory, getSettings, loadCustomDays, loadCustomExercises, saveGoal,
@@ -7,15 +7,21 @@ import { initSyncMode, onSyncError, pushRecord, runSync, supabaseConfigured } fr
 import { reminderNudge } from './engine/reminder'
 import { newlyAchieved } from './engine/goals'
 import { bodyweightAt } from './engine/bodyweight'
+import { applyActiveProfile } from './engine/equipment'
 import { notifyTrainingReminder } from './notify'
 import { BarbellIcon, ChartIcon, GearIcon, HistoryIcon, KettlebellIcon, StretchIcon } from './components/Icons'
 import { TodayScreen } from './screens/Today'
 import { WorkoutScreen } from './screens/Workout'
-import { LogScreen } from './screens/Log'
-import { StretchScreen } from './screens/Stretch'
-import { ConditioningScreen } from './screens/Conditioning'
-import { ProgressScreen } from './screens/Progress'
-import { SettingsScreen } from './screens/Settings'
+import { Onboarding } from './screens/Onboarding'
+
+// Everything but Train and the workout itself loads on demand. Train is what
+// opens when you unlock your phone in the gym; Progress (charts) and Setup
+// (forms, program builder) have no business delaying that first paint.
+const LogScreen = lazy(() => import('./screens/Log').then((m) => ({ default: m.LogScreen })))
+const StretchScreen = lazy(() => import('./screens/Stretch').then((m) => ({ default: m.StretchScreen })))
+const ConditioningScreen = lazy(() => import('./screens/Conditioning').then((m) => ({ default: m.ConditioningScreen })))
+const ProgressScreen = lazy(() => import('./screens/Progress').then((m) => ({ default: m.ProgressScreen })))
+const SettingsScreen = lazy(() => import('./screens/Settings').then((m) => ({ default: m.SettingsScreen })))
 
 export type Tab = 'today' | 'log' | 'stretch' | 'condition' | 'progress' | 'settings'
 
@@ -45,6 +51,7 @@ function loadActive(): ActiveWorkout | null {
 
 export default function App() {
   const [tab, setTab] = useState<Tab>('today')
+  const [stretchFocus, setStretchFocus] = useState<string[]>([])
   const [history, setHistory] = useState<Session[]>([])
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS)
   const [bodyLog, setBodyLog] = useState<BodyLog[]>([])
@@ -120,6 +127,11 @@ export default function App() {
     return () => document.removeEventListener('visibilitychange', onVisible)
   }, [ready, settings.reminder, history])
 
+  // Resolve the active gym's equipment once here, so plate math, warm-up rungs
+  // and suggestion rounding all read one obvious pair of fields and need no
+  // idea that profiles exist.
+  const equipped = useMemo(() => applyActiveProfile(settings), [settings])
+
   const setActive = useCallback((w: ActiveWorkout | null) => {
     setActiveState(w)
     if (w) localStorage.setItem(ACTIVE_KEY, JSON.stringify(w))
@@ -127,6 +139,13 @@ export default function App() {
   }, [])
 
   if (!ready) return null
+
+  // A fresh install runs on defaults, with bodyweight unset and the plate list
+  // guessed — which quietly switches off pull-up/dip accuracy and can prescribe
+  // weights the gym can't load. Ask four questions instead.
+  if (settings.onboardedAt === undefined && history.length === 0) {
+    return <Onboarding onDone={refresh} />
+  }
 
   const inWorkout = active !== null && tab === 'today'
 
@@ -138,30 +157,40 @@ export default function App() {
             active={active}
             setActive={setActive}
             history={history}
-            settings={settings}
+            settings={equipped}
             bodyLog={bodyLog}
             onFinished={refresh}
+            onStretch={(groups) => {
+              setActive(null)
+              setStretchFocus(groups)
+              setTab('stretch')
+            }}
           />
         ) : (
           <>
             {tab === 'today' && (
-              <TodayScreen history={history} settings={settings} bodyLog={bodyLog} startWorkout={setActive} />
+              <TodayScreen history={history} settings={equipped} bodyLog={bodyLog}
+                startWorkout={setActive} onChanged={refresh} />
             )}
-            {tab === 'log' && <LogScreen history={history} onChanged={refresh} />}
-            {tab === 'stretch' && <StretchScreen />}
-            {tab === 'condition' && <ConditioningScreen history={history} onLogged={refresh} />}
-            {tab === 'progress' && (
-              <ProgressScreen history={history} bodyLog={bodyLog} goals={goals} onChanged={refresh} />
-            )}
-            {tab === 'settings' && (
-              <SettingsScreen
-                settings={settings}
-                onChanged={refresh}
-                syncing={syncing}
-                onSyncNow={syncNow}
-                syncError={syncError}
-              />
-            )}
+            <Suspense fallback={<div className="screen-loading">Loading…</div>}>
+              {tab === 'log' && <LogScreen history={history} onChanged={refresh} />}
+              {tab === 'stretch' && (
+                <StretchScreen history={history} onLogged={refresh} focus={stretchFocus} />
+              )}
+              {tab === 'condition' && <ConditioningScreen history={history} onLogged={refresh} />}
+              {tab === 'progress' && (
+                <ProgressScreen history={history} bodyLog={bodyLog} goals={goals} onChanged={refresh} />
+              )}
+              {tab === 'settings' && (
+                <SettingsScreen
+                  settings={settings}
+                  onChanged={refresh}
+                  syncing={syncing}
+                  onSyncNow={syncNow}
+                  syncError={syncError}
+                />
+              )}
+            </Suspense>
           </>
         )}
       </main>

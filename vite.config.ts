@@ -29,6 +29,25 @@ export default defineConfig(({ mode }) => ({
       },
     }),
   ],
+  build: {
+    rollupOptions: {
+      output: {
+        // Keep the framework in its own chunk so a one-line app change doesn't
+        // invalidate ~150 kB of unchanged vendor code in everyone's service
+        // worker cache. Supabase and the tab screens are split by dynamic
+        // import instead — see db/supabaseClient.ts and App.tsx.
+        // Matched by module path, not package name: `main.tsx` imports
+        // `react-dom/client`, which is a different module id from `react-dom`
+        // and would otherwise be left behind in the entry chunk.
+        manualChunks(id: string) {
+          if (!id.includes('node_modules')) return undefined
+          if (/[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/.test(id)) return 'react'
+          if (/[\\/]node_modules[\\/]dexie[\\/]/.test(id)) return 'db'
+          return undefined
+        },
+      },
+    },
+  },
   test: {
     environment: 'node',
   },
