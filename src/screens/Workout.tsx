@@ -371,9 +371,9 @@ function ActiveSession({ active, setActive, history, settings, bodyLog, onFinish
         </div>
       )}
 
-      <div className="rpe-picker">
+      <div className="rpe-picker" role="group" aria-label="Rate of perceived exertion">
         {[6, 7, 8, 9, 10].map((r) => (
-          <button key={r} className={rpe === r ? 'on' : ''}
+          <button key={r} className={rpe === r ? 'on' : ''} aria-pressed={rpe === r}
             onClick={() => setRpe(rpe === r ? undefined : r)}>
             RPE {r}
           </button>

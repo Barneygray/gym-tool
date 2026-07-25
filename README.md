@@ -67,14 +67,26 @@ tells you exactly what to lift next.
   judged on *effective* load, so holding your pull-up reps through a bodyweight
   gain reads as the progress it is, instead of being mistaken for a stall.
 - **Muscle freshness + a coach** — the home screen shows days-since-trained per
-  muscle *and* recommends what to train next, picking the day whose muscles are
-  most rested and flagging anything gone overdue.
+  muscle *and* recommends what to train next. When your week has a session
+  scheduled for today, the coach leads with it rather than second-guessing your
+  own plan — but it still checks the plan against recovery and says so plainly
+  when the two disagree ("Push is planned, but chest rested 0d — Pull is fresher
+  if you'd rather swap"). Off-plan, it picks the freshest day, leaning toward
+  whatever the week is still short of.
 - **Editable log** — a Log tab browses every session you've finished; open one to
   fix a mistyped set, delete a set, or remove the whole session. In-workout, any
   logged set can be tapped to edit or swiped away — so a fat-fingered entry never
-  permanently skews your PRs, e1RM trends, or next suggestion.
+  permanently skews your PRs, e1RM trends, or next suggestion. Trained without
+  your phone? **Add a past session** backfills it against any date, so gaps in
+  the history stop quietly distorting stall detection, muscle freshness, and
+  consistency.
 - **Progress** — estimated 1RM trends (Epley), weekly tonnage per muscle group,
-  consistency, and PR tracking with in-session PR celebrations.
+  consistency, and PR tracking with in-session PR celebrations. PRs are kept per
+  rep band — heavy (1–5), moderate (6–12), high rep (13+) — because a heavy
+  triple and a set of fifteen aren't the same achievement and shouldn't compete.
+  Estimated 1RM only settles records and stall calls inside the rep range where
+  the formula holds up (~12), so a light high-rep back-off set can't fake a PR
+  or mask a genuine plateau.
 - **Weekly volume targets** — Progress shows hard sets per muscle for the last 7
   days against each muscle's effective range (MEV–MRV landmarks), colour-coded
   below/in/over range, and the home-screen coach flags muscles you've trained
@@ -85,8 +97,16 @@ tells you exactly what to lift next.
   and tonnage instead of counting only the added plate.
 - **Stretch tab** — key holds per muscle group, plus a *Desk Rescue* section for
   lower back, tech neck, and hips.
+- **Usable with a screen reader** — the custom switches, segmented pickers, RPE
+  row, weekday strip and steppers carry proper `switch`/`radio`/`checkbox`
+  semantics and accessible names, so their state is announced rather than being
+  conveyed by colour alone.
 - **Condition tab** — kettlebell, plyometric, and core/spinal-health movements,
-  loggable so frequency is tracked.
+  loggable so frequency is tracked. Conditioning is not a separate silo: each
+  move maps to the muscles it works, so a swing session counts toward glute and
+  hamstring freshness and weekly hard sets like any other work. It logs the
+  scheme's real set count, and never invents tonnage — a plank is a marker, not
+  a rep at bodyweight.
 - **Your data, yours** — everything lives on-device (IndexedDB); one-tap JSON
   export/import in Settings carries the lot. A restore tells you exactly what the
   file holds and what it will replace *before* it runs, refuses anything

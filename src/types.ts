@@ -63,6 +63,13 @@ export interface Exercise extends SyncMeta {
   /** Loaded on a bar — enables plate math and percentage warm-ups. */
   barLoaded: boolean
   cue: string
+  /**
+   * Conditioning work rather than a prescribable gym lift. These live in the
+   * lookup catalog so logged sessions resolve — and so they count toward muscle
+   * freshness and weekly hard sets — but stay out of `EXERCISES`, so the
+   * progression engine never prescribes a Turkish get-up for 3×8.
+   */
+  conditioning?: boolean
 }
 
 export interface SetLog {
@@ -192,6 +199,9 @@ export interface ConditioningMove {
   name: string
   equipment: Equipment
   purpose: ('power' | 'core' | 'spine')[]
+  /** Muscles worked — conditioning counts toward freshness and weekly sets too. */
+  primary: Muscle
+  secondary: Muscle[]
   scheme: string
   cue: string
 }

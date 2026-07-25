@@ -1,6 +1,6 @@
 import type { Session, SetLog } from '../types'
 import { performancesOf, type Performance } from './history'
-import { e1rm, effectiveLoad } from './stats'
+import { bestReliableE1rm, effectiveLoad } from './stats'
 import type { BodyweightAt } from './bodyweight'
 
 /** No-op bodyweight resolver — bodyweight lifts fall back to added weight. */
@@ -25,13 +25,20 @@ export function madeProgress(
   const maxW = (p: Performance) => Math.max(0, ...p.sets.map((s) => load(p, s)))
   const repsAt = (p: Performance, w: number) =>
     p.sets.filter((s) => load(p, s) === w).reduce((t, s) => t + s.reps, 0)
-  const bestE1rm = (p: Performance) => Math.max(0, ...p.sets.map((s) => e1rm(load(p, s), s.reps)))
 
   const cw = maxW(current)
   const pw = maxW(previous)
   if (cw > pw) return true
   if (cw === pw && repsAt(current, cw) > repsAt(previous, pw)) return true
-  return bestE1rm(current) > bestE1rm(previous) + 1e-9
+
+  // The e1RM tie-break only runs on sets in the rep window where the estimate
+  // holds up. Out past that, a change of rep scheme moves the number around
+  // enough to read as progress (or a stall) that never happened — and a stall
+  // verdict here costs the trainee a deload they didn't need.
+  const cur = bestReliableE1rm(current.sets, (s) => load(current, s))
+  const prev = bestReliableE1rm(previous.sets, (s) => load(previous, s))
+  if (cur === 0 || prev === 0) return false
+  return cur > prev + 1e-9
 }
 
 /**

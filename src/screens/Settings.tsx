@@ -172,7 +172,9 @@ export function SettingsScreen({ settings, onChanged, syncing, onSyncNow, syncEr
           </div>
           <button
             className={`toggle${settings.soundOn ? ' on' : ''}`}
-            aria-label="Toggle sound"
+            role="switch"
+            aria-checked={settings.soundOn}
+            aria-label="Rest timer sound"
             onClick={() => update({ soundOn: !settings.soundOn })}
           />
         </div>
@@ -197,7 +199,9 @@ export function SettingsScreen({ settings, onChanged, syncing, onSyncNow, syncEr
           </div>
           <button
             className={`toggle${settings.readinessCheck ? ' on' : ''}`}
-            aria-label="Toggle readiness check"
+            role="switch"
+            aria-checked={settings.readinessCheck === true}
+            aria-label="Readiness check"
             onClick={() => update({ readinessCheck: !settings.readinessCheck })}
           />
         </div>
@@ -484,10 +488,11 @@ function ExerciseForm({ onSave, onCancel }: {
           <input type="number" inputMode="numeric" value={hi} onChange={(e) => setHi(e.target.value)} />
         </label>
       </div>
-      <label className="ex-form-check" onClick={() => setIsCompound((c) => !c)}>
+      <button type="button" className="ex-form-check" role="switch" aria-checked={isCompound}
+        onClick={() => setIsCompound((c) => !c)}>
         <span className={`toggle${isCompound ? ' on' : ''}`} />
         <span>Compound lift (adds warm-up ramps)</span>
-      </label>
+      </button>
       <input placeholder="Coaching cue (optional)" value={cue} onChange={(e) => setCue(e.target.value)} />
       <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
         <button className="btn-small" style={{ flex: 1 }} onClick={onCancel}>Cancel</button>
@@ -538,9 +543,10 @@ function TrainingBlock({ settings, update }: {
             Ramp volume week to week, then auto-schedule a deload — structured progression instead of grinding every session.
           </div>
         </div>
-        <div className="seg" style={{ marginTop: 12 }}>
+        <div className="seg" role="radiogroup" aria-label="Block length" style={{ marginTop: 12 }}>
           {BLOCK_LENGTHS.map((w) => (
-            <button key={w} className={weeks === w ? 'on' : ''} onClick={() => setWeeks(w)}>{w} wk</button>
+            <button key={w} role="radio" aria-checked={weeks === w}
+              className={weeks === w ? 'on' : ''} onClick={() => setWeeks(w)}>{w} wk</button>
           ))}
         </div>
         <button className="btn-primary" style={{ marginTop: 12 }} onClick={start}>
@@ -579,15 +585,17 @@ function Reminders({ settings, update }: {
           <div className="k">Time to train</div>
           <div className="sub">A daily nudge to train if you haven’t yet — names the day the coach picks.</div>
         </div>
-        <button className={`toggle${on ? ' on' : ''}`} aria-label="Toggle training reminder" onClick={toggle} />
+        <button className={`toggle${on ? ' on' : ''}`} role="switch" aria-checked={on}
+          aria-label="Time-to-train reminder" onClick={toggle} />
       </div>
       {on && (
         <>
           <div className="settings-row" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
             <div className="k">Remind me at</div>
-            <div className="seg" style={{ marginTop: 10 }}>
+            <div className="seg" role="radiogroup" aria-label="Reminder time" style={{ marginTop: 10 }}>
               {REMINDER_HOURS.map((h) => (
-                <button key={h} className={hour === h ? 'on' : ''} onClick={() => setHour(h)}>{fmtHour(h)}</button>
+                <button key={h} role="radio" aria-checked={hour === h}
+                  className={hour === h ? 'on' : ''} onClick={() => setHour(h)}>{fmtHour(h)}</button>
               ))}
             </div>
           </div>

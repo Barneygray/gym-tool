@@ -1,7 +1,9 @@
 import { useMemo, useRef, useState } from 'react'
 import type { BodyLog, Goal, Muscle, Session } from '../types'
 import { EXERCISES, getExercise } from '../data/exercises'
-import { e1rmTrend, prsFor, volumeByMuscle, type E1rmPoint } from '../engine/stats'
+import {
+  E1RM_MAX_REPS, REP_BUCKETS, e1rmTrend, prsFor, volumeByMuscle, type E1rmPoint,
+} from '../engine/stats'
 import { bodyweightAt, latestBodyweight } from '../engine/bodyweight'
 import { MUSCLE_TARGETS, volumeStatus, weeklySetsByMuscle, type VolumeStatus } from '../engine/volume'
 import { projectGoal } from '../engine/goals'
@@ -71,7 +73,8 @@ export function ProgressScreen({ history, bodyLog, goals, onChanged }: {
           <div className="card chart-card">
             <div className="chart-title">Estimated 1RM</div>
             <div className="chart-sub">
-              {getExercise(exerciseId).name} — Epley, best set per session
+              {getExercise(exerciseId).name} — Epley, best set per session. Reliable to
+              about {E1RM_MAX_REPS} reps; past that read it as a trend, not a true 1RM.
             </div>
             <E1rmChart points={trend} />
           </div>
@@ -103,17 +106,42 @@ export function ProgressScreen({ history, bodyLog, goals, onChanged }: {
       {trained.length > 0 && (
         <>
           <div className="section-label">Personal records</div>
+          <p className="screen-sub" style={{ marginTop: -6 }}>
+            Best load in each rep band — a heavy triple and a set of fifteen aren’t
+            the same achievement, so they don’t compete.
+          </p>
           <div className="card">
             <table className="pr-table">
+              <thead>
+                <tr>
+                  <th scope="col" className="ex">Exercise</th>
+                  {REP_BUCKETS.map((b) => (
+                    <th scope="col" className="val" key={b.id}>
+                      {b.label}
+                      <span className="reps">
+                        {b.max === Infinity ? `${b.min}+` : `${b.min}–${b.max}`}
+                      </span>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
               <tbody>
                 {trained.map((e) => {
                   const pr = prsFor(e.id, history, bwAt)
                   if (!pr.maxWeight) return null
                   return (
                     <tr key={e.id}>
-                      <td className="ex">{e.name}</td>
-                      <td className="val num">{formatNum(Math.round(pr.maxWeight.weight * 10) / 10)} kg × {pr.maxWeight.reps}</td>
-                      <td className="est num">e1RM {pr.bestE1rm ? Math.round(pr.bestE1rm.value) : '—'}</td>
+                      <th scope="row" className="ex">{e.name}</th>
+                      {REP_BUCKETS.map((b) => {
+                        const best = pr.byBucket[b.id]
+                        return (
+                          <td className="val num" key={b.id}>
+                            {best
+                              ? <>{formatNum(Math.round(best.weight * 10) / 10)}<span className="reps">× {best.reps}</span></>
+                              : <span className="none">—</span>}
+                          </td>
+                        )
+                      })}
                     </tr>
                   )
                 })}

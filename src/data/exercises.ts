@@ -1,4 +1,5 @@
 import type { Exercise } from '../types'
+import { CONDITIONING_EXERCISES, CONDITIONING_IDS } from './conditioning'
 
 const ex = (
   id: string,
@@ -145,18 +146,31 @@ export const BUILTIN_EXERCISES: Exercise[] = [
 export const BUILTIN_IDS = new Set(BUILTIN_EXERCISES.map((e) => e.id))
 
 /**
- * The live catalog = built-ins plus any user-defined exercises. These are
- * reassigned (not mutated) by `registerCustomExercises`; ES module live
+ * Two catalogs, deliberately.
+ *
+ * `EXERCISES` is what the app will *prescribe*: built-ins plus the user's own
+ * lifts. It feeds the swap and add pickers, the program builder, and Progress.
+ *
+ * `exerciseById` is what the app can *resolve*: the same list plus conditioning
+ * moves. Anything logged has to be in here, or the stats that walk session
+ * entries — tonnage, weekly hard sets, muscle freshness — silently skip it and
+ * the Log screen falls back to printing a raw id.
+ *
+ * Both are reassigned (not mutated) by `registerCustomExercises`; ES module live
  * bindings mean every importer sees the updated array/map after registration.
  */
 export let EXERCISES: Exercise[] = [...BUILTIN_EXERCISES]
-export let exerciseById = new Map(EXERCISES.map((e) => [e.id, e]))
+export let exerciseById = indexOf(EXERCISES)
+
+function indexOf(prescribable: Exercise[]): Map<string, Exercise> {
+  return new Map([...prescribable, ...CONDITIONING_EXERCISES].map((e) => [e.id, e]))
+}
 
 /** Merge the user's custom exercises into the live catalog (call once on load). */
 export function registerCustomExercises(custom: Exercise[]): void {
-  const cleaned = custom.filter((e) => !BUILTIN_IDS.has(e.id))
+  const cleaned = custom.filter((e) => !BUILTIN_IDS.has(e.id) && !CONDITIONING_IDS.has(e.id))
   EXERCISES = [...BUILTIN_EXERCISES, ...cleaned]
-  exerciseById = new Map(EXERCISES.map((e) => [e.id, e]))
+  exerciseById = indexOf(EXERCISES)
 }
 
 export function isCustomExercise(id: string): boolean {
@@ -166,9 +180,12 @@ export function isCustomExercise(id: string): boolean {
 /**
  * Bodyweight-loaded lifts carry the trainee's own weight, so a logged "weight"
  * is *added* load — real load is bodyweight + added (see engine/bodyweight).
+ *
+ * Conditioning is excluded: a plank is logged as a marker, not a rep at a load,
+ * so folding bodyweight in would invent tonnage that was never lifted.
  */
 export function isBodyweightLoaded(exercise: Exercise): boolean {
-  return exercise.equipment === 'bodyweight'
+  return exercise.equipment === 'bodyweight' && exercise.conditioning !== true
 }
 
 export function getExercise(id: string): Exercise {
