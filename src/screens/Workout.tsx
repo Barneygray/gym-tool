@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { BodyLog, Session, SetLog, Settings } from '../types'
 import { FREESTYLE } from '../types'
-import { getExercise, isBodyweightLoaded } from '../data/exercises'
+import { exerciseById, getExercise, isBodyweightLoaded } from '../data/exercises'
 import { dayById } from '../data/days'
 import { swapOptions } from '../engine/rotation'
 import { suggestFor } from '../engine/progression'
@@ -11,6 +11,9 @@ import { platesPerSide } from '../engine/plates'
 import { newPRsInSession } from '../engine/stats'
 import { bodyweightAt, latestBodyweight } from '../engine/bodyweight'
 import { readinessEffect } from '../engine/readiness'
+import { activeProfile } from '../engine/equipment'
+import { performancesOf } from '../engine/history'
+import { groupNames, groupsForMuscles } from '../engine/mobility'
 import { saveSession } from '../db/db'
 import { pushSession } from '../db/sync'
 import { useWakeLock } from '../hooks/useWakeLock'
@@ -32,6 +35,8 @@ interface WorkoutProps {
   settings: Settings
   bodyLog: BodyLog[]
   onFinished: () => Promise<void>
+  /** Jump to the Stretch tab, focused on the given groups. */
+  onStretch: (groupIds: string[]) => void
 }
 
 const dayName = (dayType: string) =>
@@ -70,7 +75,7 @@ function EmptyWorkout({ active, setActive }: WorkoutProps) {
   )
 }
 
-function ActiveSession({ active, setActive, history, settings, bodyLog, onFinished }: WorkoutProps) {
+function ActiveSession({ active, setActive, history, settings, bodyLog, onFinished, onStretch }: WorkoutProps) {
   const [summary, setSummary] = useState<{ session: Session; prs: ReturnType<typeof newPRsInSession> } | null>(null)
   const [rest, setRest] = useState<{ startedAt: number; durationSec: number } | null>(null)
   /** 'add' appends a station; 'swap' replaces the current one. */
@@ -260,6 +265,7 @@ function ActiveSession({ active, setActive, history, settings, bodyLog, onFinish
       finishedAt: Date.now(),
       entries,
       ...(active.readiness ? { readiness: active.readiness } : {}),
+      profileId: activeProfile(settings).id,
     }
     await saveSession(session)
     void pushSession(session)
@@ -270,7 +276,15 @@ function ActiveSession({ active, setActive, history, settings, bodyLog, onFinish
   }
 
   if (summary) {
-    return <SummaryView summary={summary} dayType={active.dayType} onDone={() => setActive(null)} />
+    return (
+      <SummaryView
+        summary={summary}
+        dayType={active.dayType}
+        history={history}
+        onDone={() => setActive(null)}
+        onStretch={onStretch}
+      />
+    )
   }
 
   const isLast = index === active.exerciseIds.length - 1
@@ -341,7 +355,15 @@ function ActiveSession({ active, setActive, history, settings, bodyLog, onFinish
             : <>{formatNum(suggestion.weight)} kg × {suggestion.targetReps} <small>× {suggestion.sets} sets</small></>}
         </div>
         <div className="why">{suggestion.reason}</div>
+        {suggestion.offerSwap && untouched && (
+          <button className="btn-small accent" style={{ marginTop: 10 }}
+            onClick={() => setPicking('swap')}>
+            <SwapIcon size={14} /> Swap to a variation
+          </button>
+        )}
       </div>
+
+      <ExerciseHistory exerciseId={exercise.id} history={history} />
 
       {warmups.length > 0 && (
         <div className="card warmup-list">
@@ -448,12 +470,68 @@ function ActiveSession({ active, setActive, history, settings, bodyLog, onFinish
   )
 }
 
-function SummaryView({ summary, dayType, onDone }: {
+/**
+ * The last few sessions on this lift, in full: sets, RPE and the notes you left
+ * yourself. The engine's one-line "last time" summary answers *what* you did;
+ * standing at the rack deciding whether to take the jump, what you usually want
+ * is the session before that, and whether you wrote "left shoulder pinched".
+ */
+function ExerciseHistory({ exerciseId, history }: { exerciseId: string; history: Session[] }) {
+  const [open, setOpen] = useState(false)
+  const recent = useMemo(() => performancesOf(exerciseId, history).slice(0, 3), [exerciseId, history])
+  if (recent.length === 0) return null
+
+  return (
+    <div className="ex-history">
+      <button className="ex-history-toggle" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+        {open ? '▾' : '▸'} Last {recent.length} session{recent.length > 1 ? 's' : ''}
+      </button>
+      {open && recent.map((p) => (
+        <div className="ex-history-session" key={p.startedAt}>
+          <div className="when">{relativeDay(p.startedAt)}</div>
+          <div className="sets num">
+            {p.sets.map((set, i) => (
+              <span key={i} className="hset">
+                {formatNum(set.weight)}×{set.reps}
+                {set.rpe !== undefined && <em> @{set.rpe}</em>}
+              </span>
+            ))}
+          </div>
+          {p.sets.filter((set) => set.note).map((set, i) => (
+            <div className="hnote" key={i}>“{set.note}”</div>
+          ))}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function relativeDay(ts: number): string {
+  const days = Math.round((Date.now() - ts) / 86_400_000)
+  if (days <= 0) return 'Today'
+  if (days === 1) return 'Yesterday'
+  if (days < 14) return `${days} days ago`
+  return new Date(ts).toLocaleDateString('en', { day: 'numeric', month: 'short' })
+}
+
+function SummaryView({ summary, dayType, history, onDone, onStretch }: {
   summary: { session: Session; prs: ReturnType<typeof newPRsInSession> }
   dayType: string
+  history: Session[]
   onDone: () => void
+  onStretch: (groupIds: string[]) => void
 }) {
   const { session, prs } = summary
+
+  // Warm, finished, phone already in hand — the one moment stretching actually
+  // happens. Offer the groups covering what was just trained, stalest first.
+  const muscles = [...new Set(
+    session.entries.flatMap((e) => {
+      const ex = exerciseById.get(e.exerciseId)
+      return ex ? [ex.primary, ...ex.secondary] : []
+    }),
+  )]
+  const stretchGroups = groupsForMuscles(muscles, history, Date.now()).slice(0, 2)
   const totalSets = session.entries.reduce((t, e) => t + e.sets.length, 0)
   const tonnage = session.entries.reduce(
     (t, e) => t + e.sets.reduce((s, x) => s + x.weight * x.reps, 0), 0)
@@ -482,6 +560,13 @@ function SummaryView({ summary, dayType, onDone }: {
         <div className="card" style={{ color: 'var(--text-dim)', fontSize: 14 }}>
           No PRs today — showing up is the PR. The engine has adjusted your next targets.
         </div>
+      )}
+
+      {stretchGroups.length > 0 && (
+        <button className="btn-ghost stretch-offer" style={{ marginTop: 14 }}
+          onClick={() => onStretch(stretchGroups)}>
+          Stretch it out — {groupNames(stretchGroups).join(' · ')}
+        </button>
       )}
 
       <div style={{ height: 20 }} />

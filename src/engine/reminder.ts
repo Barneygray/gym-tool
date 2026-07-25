@@ -1,5 +1,6 @@
 import type { ReminderConfig, Session } from '../types'
 import { recommendDay } from './coach'
+import { isGymSession } from './mobility'
 
 export interface ReminderNudge {
   due: boolean
@@ -14,12 +15,10 @@ function startOfDay(ts: number): number {
   return d.getTime()
 }
 
-/** Did a gym session (not conditioning) already happen today? */
+/** Did a gym session (not conditioning or mobility) already happen today? */
 export function trainedToday(history: Session[], now: number): boolean {
   const today = startOfDay(now)
-  return history.some(
-    (s) => s.dayType !== 'conditioning' && startOfDay(s.startedAt) === today,
-  )
+  return history.some((s) => isGymSession(s) && startOfDay(s.startedAt) === today)
 }
 
 /**

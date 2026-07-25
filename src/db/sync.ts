@@ -1,5 +1,6 @@
+import type { SupabaseClient } from '@supabase/supabase-js'
 import type { BodyLog, DayTemplate, Exercise, Goal, Session, Settings, SyncMeta } from '../types'
-import { supabase, supabaseConfigured } from './supabaseClient'
+import { getSupabase, supabaseConfigured } from './supabaseClient'
 import {
   applyRemoteBodyLog, applyRemoteDays, applyRemoteExercises, applyRemoteGoals, applyRemoteSessions,
   getAllBodyLog, getAllCustomDays, getAllCustomExercises, getAllGoals, getAllSessions, getSettings,
@@ -7,6 +8,8 @@ import {
 } from './db'
 import { planSessionSync, planSync, recordStamp, syncStamp } from '../engine/syncPlan'
 import { ownerKey } from './syncKey'
+
+type Client = SupabaseClient
 
 export { supabaseConfigured }
 export {
@@ -102,20 +105,20 @@ const compose = (kind: string, id: string) => `${kind}:${id}`
  * sync rather than thrown.
  */
 export async function runSync(): Promise<void> {
+  const supabase = await getSupabase()
   if (!supabase) return
   try {
     const owner = await ownerKey()
-    await syncSessions(owner)
-    await syncRecords(owner)
-    await syncSettings(owner)
+    await syncSessions(supabase, owner)
+    await syncRecords(supabase, owner)
+    await syncSettings(supabase, owner)
     reportSync(null)
   } catch (e) {
     reportSync(e instanceof Error ? `Cloud sync failed: ${e.message}` : 'Cloud sync failed.')
   }
 }
 
-async function syncSessions(owner: string): Promise<void> {
-  if (!supabase) return
+async function syncSessions(supabase: Client, owner: string): Promise<void> {
   const local = await getAllSessions()
   const { data: remoteMeta, error: metaError } = await supabase
     .from('sessions')
@@ -160,8 +163,7 @@ async function syncSessions(owner: string): Promise<void> {
  * exercises those sessions referenced — leaving unknown ids that the tonnage,
  * hard-set, freshness, and PR calculations all quietly skipped.
  */
-async function syncRecords(owner: string): Promise<void> {
-  if (!supabase) return
+async function syncRecords(supabase: Client, owner: string): Promise<void> {
   const [exercises, days, goals, bodyweights] = await Promise.all([
     getAllCustomExercises(),
     getAllCustomDays(),
@@ -229,8 +231,7 @@ async function syncRecords(owner: string): Promise<void> {
  * columns the table happened to name. The whole object travels as JSON now, so
  * adding a setting is a client change, not a schema migration.
  */
-async function syncSettings(owner: string): Promise<void> {
-  if (!supabase) return
+async function syncSettings(supabase: Client, owner: string): Promise<void> {
   const local = await getSettings()
   const { data: remote, error } = await supabase
     .from('settings')
@@ -250,6 +251,7 @@ async function syncSettings(owner: string): Promise<void> {
 }
 
 export async function pushSettings(settings: Settings): Promise<void> {
+  const supabase = await getSupabase()
   if (!supabase) return
   const owner = await ownerKey()
   const { error } = await supabase.from('settings').upsert({
@@ -267,6 +269,7 @@ export async function pushSettings(settings: Settings): Promise<void> {
 
 /** Fire-and-forget push of a single session write (create, edit, or delete). */
 export async function pushSession(session: Session): Promise<void> {
+  const supabase = await getSupabase()
   if (!supabase) return
   const owner = await ownerKey()
   const { error } = await supabase.from('sessions').upsert(sessionRow(session, owner))
@@ -279,7 +282,9 @@ export async function pushRecord(
   id: string,
   payload: SyncMeta | undefined,
 ): Promise<void> {
-  if (!supabase || !payload) return
+  if (!payload) return
+  const supabase = await getSupabase()
+  if (!supabase) return
   const owner = await ownerKey()
   const { error } = await supabase.from('records').upsert(recordRow(kind, id, payload, owner))
   reportSync(error ? `Couldn't back up your last change: ${error.message}` : null)

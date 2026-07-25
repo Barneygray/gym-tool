@@ -8,6 +8,7 @@ import { bodyweightAt, latestBodyweight } from '../engine/bodyweight'
 import { MUSCLE_TARGETS, volumeStatus, weeklySetsByMuscle, type VolumeStatus } from '../engine/volume'
 import { projectGoal } from '../engine/goals'
 import { performancesOf } from '../engine/history'
+import { isGymSession } from '../engine/mobility'
 import { deleteGoal, saveBodyweight, saveGoal } from '../db/db'
 import { pushRecord } from '../db/sync'
 import { formatNum } from '../components/Stepper'
@@ -561,7 +562,7 @@ function FrequencyBars({ history, now }: { history: Session[]; now: number }) {
   const weeks: number[] = Array.from({ length: 8 }, (_, i) => {
     const from = now - (8 - i) * WEEK
     const to = from + WEEK
-    return history.filter((s) => s.dayType !== 'conditioning' && s.startedAt >= from && s.startedAt < to).length
+    return history.filter((s) => isGymSession(s) && s.startedAt >= from && s.startedAt < to).length
   })
   const W = 340
   const H = 92
