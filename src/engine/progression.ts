@@ -1,40 +1,59 @@
-import type { Exercise, Session, Settings, Suggestion } from '../types'
+import type { Exercise, ReadinessLevel, Session, Settings, Suggestion } from '../types'
 import type { MesoPhase } from './mesocycle'
-import { performancesOf } from './history'
+import { performancesOf, type Performance } from './history'
 import { isStalled } from './stall'
 import { roundToLoadable, roundToStep } from './plates'
+import { readinessEffect } from './readiness'
+import { isBodyweightLoaded } from '../data/exercises'
+import type { BodyweightAt } from './bodyweight'
 
 export const WORKING_SETS = 3
 /** Never prescribe fewer than this many working sets, deload included. */
 const MIN_SETS = 2
 /** Cap the accumulation ramp so a long block doesn't run away. */
 const MAX_SETS = 5
+/** How many past performances the RPE read averages over. */
+const RPE_WINDOW = 3
 
-/** Working-set count for a phase — accumulation adds sets, deload trims one. */
-function setsForPhase(phase?: MesoPhase | null): number {
-  if (!phase) return WORKING_SETS
-  return Math.max(MIN_SETS, Math.min(MAX_SETS, WORKING_SETS + phase.setBias))
+const NO_BW: BodyweightAt = () => 0
+
+export interface SuggestOptions {
+  /** Resolves bodyweight at a moment, so bodyweight lifts are judged honestly. */
+  bwAt?: BodyweightAt
+  /** Today's pre-session self-rating, if the readiness check is on. */
+  readiness?: ReadinessLevel | null
 }
 
 /**
  * Double progression: work up the rep range at a fixed weight; when every set
  * reaches the top of the range, add weight and rebuild from the bottom.
- * RPE sharpens the jumps: a top-of-range session that still felt easy
- * (avg RPE ≤ 7) earns a double increment.
  *
- * An optional mesocycle `phase` layers periodization on top: accumulation weeks
- * ramp the prescribed set count, and the deload week backs the load off and
- * cuts a set so fatigue clears before the next block.
+ * Three things bend that baseline:
+ *  - **RPE**, read across the last few sessions rather than one, scales the size
+ *    of the jump continuously instead of flipping a single "was it easy" switch.
+ *  - **A mesocycle phase** ramps prescribed sets through accumulation weeks and
+ *    backs load off on the planned deload.
+ *  - **Readiness** — a pre-session self-rating — nudges load and set count for
+ *    the day, because the log can't see that you slept badly.
+ *
+ * Stall detection is bodyweight-aware when `bwAt` is given, so pull-ups and dips
+ * are judged on total load like everywhere else in the app.
  */
 export function suggestFor(
   exercise: Exercise,
   history: Session[],
   settings: Settings,
   phase?: MesoPhase | null,
+  options: SuggestOptions = {},
 ): Suggestion {
+  const { bwAt = NO_BW, readiness = null } = options
   const [lo, hi] = exercise.repRange
   const perfs = performancesOf(exercise.id, history)
-  const sets = setsForPhase(phase)
+  const ready = readinessEffect(readiness)
+
+  const sets = clampSets(WORKING_SETS + (phase?.setBias ?? 0) + (ready?.setBias ?? 0))
+  const intensity = (phase?.intensity ?? 1) * (ready?.intensity ?? 1)
+  const readyNote = ready && ready.note ? ` ${ready.note}` : ''
 
   if (perfs.length === 0) {
     return {
@@ -52,54 +71,105 @@ export function suggestFor(
 
   // A planned deload overrides the progression: everyone backs off together.
   if (phase?.phase === 'deload') {
-    const backed = loadableRound(exercise, topWeight * phase.intensity, settings)
+    const backed = loadableRound(exercise, topWeight * intensity, settings)
     return {
       weight: backed,
       targetReps: lo,
       sets,
-      reason: `Deload week — ${Math.round(phase.intensity * 100)}% of ${fmt(topWeight)} kg for ${sets} crisp sets. Recover, don't grind.`,
+      reason: `Deload week — ${Math.round(intensity * 100)}% of ${fmt(topWeight)} kg for ${sets} crisp sets. Recover, don't grind.${readyNote}`,
       kind: 'deload',
     }
   }
 
-  if (isStalled(exercise.id, history)) {
-    const deloaded = loadableRound(exercise, topWeight * 0.9, settings)
+  if (isStalled(exercise.id, history, bwAt)) {
+    const deloaded = loadableRound(exercise, topWeight * 0.9 * intensity, settings)
+    const carried = isBodyweightLoaded(exercise) && bwAt(last.startedAt) > 0
     return {
       weight: deloaded,
       targetReps: lo,
       sets,
-      reason: `Stalled 3 sessions at ${fmt(topWeight)} kg. Deload to ${fmt(deloaded)} kg and rebuild — or swap to a sibling variation.`,
+      reason: carried
+        ? `Stalled 3 sessions at ${fmt(topWeight)} kg added, bodyweight counted. Back off to ${fmt(deloaded)} kg and rebuild — or swap to a sibling variation.`
+        : `Stalled 3 sessions at ${fmt(topWeight)} kg. Deload to ${fmt(deloaded)} kg and rebuild — or swap to a sibling variation.`,
       kind: 'deload',
     }
   }
 
-  const allAtTop = topSets.length >= WORKING_SETS && topSets.every((s) => s.reps >= hi)
+  // Every logged set at the top weight has to top the rep range. The bar is the
+  // set count actually worked that day (min 2), not a fixed 3 — otherwise a
+  // deload week's two hard sets could never earn a jump.
+  const requiredTop = Math.max(MIN_SETS, Math.min(WORKING_SETS, last.sets.length))
+  const allAtTop = topSets.length >= requiredTop && topSets.every((s) => s.reps >= hi)
+
   if (allAtTop) {
-    const rpes = topSets.map((s) => s.rpe).filter((r): r is number => r !== undefined)
-    const avgRpe = rpes.length > 0 ? rpes.reduce((a, b) => a + b, 0) / rpes.length : null
-    const easy = avgRpe !== null && avgRpe <= 7
-    const jump = easy ? exercise.increment * 2 : exercise.increment
-    const next = loadableRound(exercise, topWeight + jump, settings)
+    const avgRpe = recentAvgRpe(perfs)
+    const jump = exercise.increment * rpeMultiplier(avgRpe)
+    const next = loadableRound(exercise, (topWeight + jump) * intensity, settings)
     return {
       weight: next,
       targetReps: lo,
       sets,
-      reason: easy
-        ? `Topped the range at ${fmt(topWeight)} kg and it felt easy (RPE ${avgRpe!.toFixed(1)}) — double jump to ${fmt(next)} kg.`
-        : `All sets hit ${hi} reps at ${fmt(topWeight)} kg — move up to ${fmt(next)} kg.`,
+      reason: describeJump(avgRpe, topWeight, next, hi) + readyNote,
       kind: 'increase',
     }
   }
 
   const weakest = Math.min(...topSets.map((s) => s.reps))
   const target = Math.min(Math.max(weakest + 1, lo), hi)
+  // Hold the exact weight when nothing is backing it off — re-rounding a
+  // perfectly good working weight would silently move it.
+  const held = intensity === 1 ? topWeight : loadableRound(exercise, topWeight * intensity, settings)
   return {
-    weight: topWeight,
+    weight: held,
     targetReps: target,
     sets,
-    reason: `Last time: ${topSets.map((s) => s.reps).join('/')} reps at ${fmt(topWeight)} kg. Beat it — aim for ${target}+ on every set.`,
+    reason: `Last time: ${topSets.map((s) => s.reps).join('/')} reps at ${fmt(topWeight)} kg. Beat it — aim for ${target}+ on every set.${readyNote}`,
     kind: 'build',
   }
+}
+
+function clampSets(sets: number): number {
+  return Math.max(MIN_SETS, Math.min(MAX_SETS, sets))
+}
+
+/**
+ * Mean RPE across the top-weight sets of the last few performances. Sessions
+ * with nothing tagged are skipped rather than counted as easy, so the read stays
+ * honest when only the occasional set gets an RPE. Null = nothing to read.
+ */
+export function recentAvgRpe(perfs: Performance[], window = RPE_WINDOW): number | null {
+  const rpes: number[] = []
+  for (const p of perfs.slice(0, window)) {
+    const top = Math.max(...p.sets.map((s) => s.weight))
+    for (const s of p.sets) {
+      if (s.weight === top && s.rpe !== undefined) rpes.push(s.rpe)
+    }
+  }
+  if (rpes.length === 0) return null
+  return rpes.reduce((a, b) => a + b, 0) / rpes.length
+}
+
+/**
+ * How many increments to add once the rep range is topped, as a function of how
+ * hard recent sets felt. Untagged sessions get the plain single increment — the
+ * conservative default, and what the app did before RPE mattered.
+ */
+export function rpeMultiplier(avgRpe: number | null): number {
+  if (avgRpe === null) return 1
+  if (avgRpe <= 7) return 2
+  if (avgRpe <= 8) return 1.5
+  if (avgRpe <= 9) return 1
+  return 0.5
+}
+
+function describeJump(avgRpe: number | null, from: number, to: number, hi: number): string {
+  if (avgRpe === null) return `All sets hit ${hi} reps at ${fmt(from)} kg — move up to ${fmt(to)} kg.`
+  const felt =
+    avgRpe <= 7 ? 'and it felt easy'
+      : avgRpe <= 8 ? 'with a rep or two left'
+      : avgRpe <= 9 ? 'and it was real work'
+      : 'but it was a grind'
+  return `Topped the range at ${fmt(from)} kg ${felt} (RPE ${avgRpe.toFixed(1)} across recent sessions) — go to ${fmt(to)} kg.`
 }
 
 function loadableRound(exercise: Exercise, weight: number, settings: Settings): number {

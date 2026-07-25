@@ -13,6 +13,17 @@ export type Muscle =
 export type DayType = 'push' | 'pull' | 'legs' | 'shoulders-arms' | 'chest-back'
 
 /**
+ * Sync bookkeeping shared by every record that reaches the cloud. `updatedAt`
+ * is the last local write and drives last-write-wins reconciliation;
+ * `deletedAt` is a tombstone kept in place of a hard delete so removals
+ * propagate to other devices instead of being resurrected by the next pull.
+ */
+export interface SyncMeta {
+  updatedAt?: number
+  deletedAt?: number
+}
+
+/**
  * Any gym day identity — a built-in `DayType` or a user-built custom day's id.
  * The `string & {}` keeps the built-in literals as editor suggestions while
  * still admitting the arbitrary ids the program builder mints.
@@ -22,6 +33,12 @@ export type DayId = DayType | (string & {})
 /** Sessions cover gym days plus logged conditioning work. */
 export type SessionKind = DayId | 'conditioning'
 
+/**
+ * The pseudo-day for an unplanned session: no template, no prescribed
+ * exercises — you build it as you go. Stored like any other `dayType`.
+ */
+export const FREESTYLE = 'freestyle'
+
 export type Equipment =
   | 'barbell'
   | 'dumbbell'
@@ -30,7 +47,7 @@ export type Equipment =
   | 'bodyweight'
   | 'kettlebell'
 
-export interface Exercise {
+export interface Exercise extends SyncMeta {
   id: string
   name: string
   primary: Muscle
@@ -60,7 +77,7 @@ export interface SessionEntry {
   sets: SetLog[]
 }
 
-export interface Session {
+export interface Session extends SyncMeta {
   id?: number
   /** Stable cross-device identity, used as the cloud-sync key. */
   uuid: string
@@ -68,19 +85,24 @@ export interface Session {
   startedAt: number
   finishedAt?: number
   entries: SessionEntry[]
-  /** Last local write (create or edit), ms epoch. Drives sync conflict resolution. */
-  updatedAt?: number
-  /** Soft-delete tombstone, ms epoch. Set = deleted; kept so deletions propagate via sync. */
-  deletedAt?: number
+  /** How the trainee rated their readiness before starting. Absent = not asked. */
+  readiness?: ReadinessLevel
 }
 
 /** One bodyweight reading, keyed by start-of-day epoch (one entry per day). */
-export interface BodyLog {
+export interface BodyLog extends SyncMeta {
   at: number
   kg: number
 }
 
-export interface Settings {
+/**
+ * A week's training layout: seven entries, Monday→Sunday. Each is the id of
+ * the day template scheduled then, or null for a rest day. Custom days are
+ * first-class here — the plan holds `DayId`s, not just the built-in five.
+ */
+export type WeekPlan = (DayId | null)[]
+
+export interface Settings extends SyncMeta {
   id: string
   barWeightKg: number
   /** Plate denominations available, per side, in kg. */
@@ -90,9 +112,19 @@ export interface Settings {
   meso?: MesoConfig | null
   /** Daily "time to train" nudge. Absent = off. */
   reminder?: ReminderConfig | null
-  /** Target gym sessions per week; drives the weekly plan. Absent = default (4). */
+  /** Target gym sessions per week; drives the automatic weekly plan. Absent = default (4). */
   weeklyFrequency?: number
+  /**
+   * Hand-built Mon→Sun plan. Absent = derive one from `weeklyFrequency` and
+   * the built-in split, which is what the app did before plans were editable.
+   */
+  weekPlan?: WeekPlan | null
+  /** Ask how you're feeling before each session and autoregulate on it. */
+  readinessCheck?: boolean
 }
+
+/** Pre-session self-rating that autoregulates the day's prescription. */
+export type ReadinessLevel = 'fresh' | 'normal' | 'beat'
 
 /**
  * A mesocycle: a repeating block of `weeks` where accumulation weeks ramp
@@ -124,7 +156,7 @@ export interface DaySlot {
   pool: string[]
 }
 
-export interface DayTemplate {
+export interface DayTemplate extends SyncMeta {
   id: DayId
   name: string
   muscles: Muscle[]
@@ -143,7 +175,7 @@ export interface Stretch {
 }
 
 /** A strength goal: reach `targetE1rm` on an exercise, optionally by a date. */
-export interface Goal {
+export interface Goal extends SyncMeta {
   id: string
   exerciseId: string
   /** Target estimated 1RM in kg. */

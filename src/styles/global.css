@@ -737,3 +737,84 @@ input:focus, textarea:focus { border-color: var(--ember-deep); }
   font-size: 12.5px;
   color: var(--text-dim);
 }
+
+/* ── Freestyle session ───────────────────────────────── */
+.day-card.freestyle {
+  border-style: dashed;
+  border-color: var(--line-strong);
+  background: transparent;
+}
+.day-card.freestyle h3 { color: var(--text-dim); }
+
+/* ── Readiness check ─────────────────────────────────── */
+.readiness { margin-bottom: 14px; }
+.readiness-note {
+  margin-top: 8px;
+  font-size: 12.5px;
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+.readiness-banner {
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  padding: 7px 12px;
+  margin-bottom: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-dim);
+}
+
+/* ── Reshaping a session mid-workout ─────────────────── */
+.station-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.station-actions .btn-small {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.add-picker-group {
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  padding: 10px 4px 4px;
+}
+
+/* ── Weekly plan editor ──────────────────────────────── */
+.plan-editor { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.plan-editor-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.plan-editor-row .wd-name { font-size: 14px; color: var(--text-dim); }
+.plan-editor-row select { flex: 0 1 58%; min-width: 0; }
+
+/* ── Cloud backup key ────────────────────────────────── */
+.sync-key {
+  flex-direction: column;
+  align-items: stretch;
+  border-top: 1px solid var(--line);
+  border-bottom: none;
+  margin-top: 10px;
+  padding-top: 12px;
+}
+.key-display {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  font-size: 14px;
+  letter-spacing: 0.08em;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+.key-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
