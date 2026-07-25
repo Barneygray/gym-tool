@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
-import type { DayId, DayType, Muscle, Session, Settings } from '../types'
+import type { BodyLog, DayId, Muscle, ReadinessLevel, Session, Settings } from '../types'
+import { FREESTYLE } from '../types'
 import { DAYS, dayById } from '../data/days'
 import { EXERCISES, getExercise } from '../data/exercises'
 import { generateWorkout, swapOptions } from '../engine/rotation'
@@ -7,7 +8,9 @@ import { suggestFor } from '../engine/progression'
 import { recommendDay } from '../engine/coach'
 import { phaseFor } from '../engine/mesocycle'
 import { buildSupersets } from '../engine/superset'
-import { clampFrequency, defaultSplit, mondayIndex, rotationStart, weeklyPlan } from '../engine/schedule'
+import { mondayIndex, resolveWeekPlan, shortDayLabel, weeklyPlan } from '../engine/schedule'
+import { READINESS_LEVELS, readinessEffect, readinessLabel } from '../engine/readiness'
+import { bodyweightAt } from '../engine/bodyweight'
 import { lastSessionOf } from '../engine/history'
 import { recoveryByMuscle, daysSince } from '../engine/stats'
 import { ChevronIcon, CloseIcon, LinkIcon, SwapIcon } from '../components/Icons'
@@ -19,28 +22,28 @@ const MUSCLE_LABEL: Record<Muscle, string> = {
   quads: 'Quads', hamstrings: 'Hams', glutes: 'Glutes', calves: 'Calves', core: 'Core',
 }
 
-const DAY_SHORT: Record<DayType, string> = {
-  push: 'Push', pull: 'Pull', legs: 'Legs', 'shoulders-arms': 'Arms', 'chest-back': 'Ch/Bk',
-}
 const WEEKDAY_LETTER = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
 
 interface TodayProps {
   history: Session[]
   settings: Settings
+  bodyLog: BodyLog[]
   startWorkout: (w: ActiveWorkout) => void
 }
 
-export function TodayScreen({ history, settings, startWorkout }: TodayProps) {
+export function TodayScreen({ history, settings, bodyLog, startWorkout }: TodayProps) {
   const [previewDay, setPreviewDay] = useState<DayId | null>(null)
   const now = Date.now()
   const recovery = useMemo(() => recoveryByMuscle(history, now), [history, now])
   const rec = useMemo(() => recommendDay(history, now), [history, now])
   const phase = useMemo(() => phaseFor(settings.meso, now), [settings.meso, now])
-  const freq = clampFrequency(settings.weeklyFrequency ?? 4)
-  const plan = useMemo(
-    () => weeklyPlan(now, freq, rotationStart(history, defaultSplit(freq))),
-    [now, freq, history],
-  )
+  const bwAt = useMemo(() => bodyweightAt(bodyLog), [bodyLog])
+  // The week's layout: a hand-built plan when there is one — custom days
+  // included — otherwise the frequency-derived automatic one.
+  const slots = useMemo(() => resolveWeekPlan(settings, history), [settings, history])
+  const plan = useMemo(() => weeklyPlan(now, 4, 0, slots), [now, slots])
+  const planned = plan.filter((d) => d.dayType).length
+  const custom = settings.weekPlan != null
   const todayIdx = mondayIndex(now)
 
   return (
@@ -71,7 +74,9 @@ export function TodayScreen({ history, settings, startWorkout }: TodayProps) {
         )}
       </button>
 
-      <div className="section-label">This week · {freq}× plan</div>
+      <div className="section-label">
+        This week · {planned}× {custom ? 'your plan' : 'auto plan'}
+      </div>
       <div className="week-plan">
         {plan.map((d) => (
           <button
@@ -81,7 +86,7 @@ export function TodayScreen({ history, settings, startWorkout }: TodayProps) {
             onClick={() => d.dayType && setPreviewDay(d.dayType)}
           >
             <span className="wd">{WEEKDAY_LETTER[d.weekday]}</span>
-            <span className="pd-name">{d.dayType ? DAY_SHORT[d.dayType] : 'Rest'}</span>
+            <span className="pd-name">{d.dayType ? shortDayLabel(d.dayType) : 'Rest'}</span>
             {d.weekday === todayIdx && <span className="pd-today">Today</span>}
           </button>
         ))}
@@ -123,14 +128,34 @@ export function TodayScreen({ history, settings, startWorkout }: TodayProps) {
         )
       })}
 
+      <button
+        className="day-card freestyle"
+        onClick={() =>
+          startWorkout({
+            dayType: FREESTYLE,
+            startedAt: Date.now(),
+            exerciseIds: [],
+            logged: {},
+            currentIndex: 0,
+          })
+        }
+      >
+        <div>
+          <h3>Freestyle session</h3>
+          <div className="meta">No template — pick lifts as you go</div>
+        </div>
+        <span className="chev"><ChevronIcon /></span>
+      </button>
+
       {previewDay && (
         <WorkoutPreview
           dayType={previewDay}
           history={history}
           settings={settings}
           phase={phase}
+          bwAt={bwAt}
           onClose={() => setPreviewDay(null)}
-          onStart={(exerciseIds, supersets) => {
+          onStart={(exerciseIds, supersets, readiness) => {
             startWorkout({
               dayType: previewDay,
               startedAt: Date.now(),
@@ -138,6 +163,7 @@ export function TodayScreen({ history, settings, startWorkout }: TodayProps) {
               logged: {},
               currentIndex: 0,
               supersets,
+              readiness,
             })
             setPreviewDay(null)
           }}
@@ -154,19 +180,23 @@ function freshnessColor(days: number): string {
   return 'var(--green)' // recovered, ready to hit
 }
 
-function WorkoutPreview({ dayType, history, settings, phase, onClose, onStart }: {
+function WorkoutPreview({ dayType, history, settings, phase, bwAt, onClose, onStart }: {
   dayType: DayId
   history: Session[]
   settings: Settings
   phase: ReturnType<typeof phaseFor>
+  bwAt: ReturnType<typeof bodyweightAt>
   onClose: () => void
-  onStart: (exerciseIds: string[], supersets: string[][]) => void
+  onStart: (exerciseIds: string[], supersets: string[][], readiness: ReadinessLevel | null) => void
 }) {
   const day = dayById.get(dayType)!
   const [exerciseIds, setExerciseIds] = useState<string[]>(() => generateWorkout(day, history))
   // Ids "joined" to the exercise directly above them, forming a superset.
   const [joined, setJoined] = useState<Set<string>>(new Set())
   const [adding, setAdding] = useState(false)
+  const askReadiness = settings.readinessCheck === true
+  const [readiness, setReadiness] = useState<ReadinessLevel | null>(askReadiness ? 'normal' : null)
+  const readyNote = readinessEffect(readiness)?.note ?? ''
 
   const swap = (index: number) => {
     const options = swapOptions(exerciseIds[index], exerciseIds)
@@ -216,9 +246,25 @@ function WorkoutPreview({ dayType, history, settings, phase, onClose, onStart }:
         <p className="screen-sub" style={{ marginBottom: 8 }}>
           Rotated for fresh stimulus — swap, add, drop, or link two into a superset.
         </p>
+
+        {askReadiness && (
+          <div className="readiness">
+            <div className="section-label" style={{ marginTop: 0 }}>How are you feeling?</div>
+            <div className="seg">
+              {READINESS_LEVELS.map((level) => (
+                <button key={level} className={readiness === level ? 'on' : ''}
+                  onClick={() => setReadiness(level)}>
+                  {readinessLabel(level)}
+                </button>
+              ))}
+            </div>
+            {readyNote && <div className="readiness-note">{readyNote}</div>}
+          </div>
+        )}
+
         {exerciseIds.map((id, i) => {
           const exercise = getExercise(id)
-          const suggestion = suggestFor(exercise, history, settings, phase)
+          const suggestion = suggestFor(exercise, history, settings, phase, { bwAt, readiness })
           const gi = groupIndexOf(id)
           const linkedUp = joined.has(id) && gi >= 0
           return (
@@ -272,7 +318,8 @@ function WorkoutPreview({ dayType, history, settings, phase, onClose, onStart }:
         )}
 
         <div style={{ height: 14 }} />
-        <button className="btn-primary" onClick={() => onStart(exerciseIds, supersets)} disabled={exerciseIds.length === 0}
+        <button className="btn-primary" onClick={() => onStart(exerciseIds, supersets, readiness)}
+          disabled={exerciseIds.length === 0}
           style={{ opacity: exerciseIds.length === 0 ? 0.4 : 1 }}>
           Start {day.name}
         </button>

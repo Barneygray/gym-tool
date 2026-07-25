@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { BodyLog, DayId, Goal, Session, SetLog, Settings } from './types'
+import type { BodyLog, DayId, Goal, ReadinessLevel, Session, SetLog, Settings } from './types'
 import {
   DEFAULT_SETTINGS, getBodyLog, getGoals, getHistory, getSettings, loadCustomDays, loadCustomExercises, saveGoal,
 } from './db/db'
-import { onSyncError, runSync, supabaseConfigured } from './db/sync'
+import { initSyncMode, onSyncError, pushRecord, runSync, supabaseConfigured } from './db/sync'
 import { reminderNudge } from './engine/reminder'
 import { newlyAchieved } from './engine/goals'
 import { bodyweightAt } from './engine/bodyweight'
@@ -27,6 +27,8 @@ export interface ActiveWorkout {
   currentIndex: number
   /** Exercise-id groups trained as supersets (each group has 2+ ids). */
   supersets?: string[][]
+  /** Pre-session self-rating, when the readiness check is on. */
+  readiness?: ReadinessLevel | null
 }
 
 const ACTIVE_KEY = 'forge-active-workout'
@@ -62,7 +64,8 @@ export default function App() {
     const hit = newlyAchieved(g, h, bodyweightAt(bl))
     if (hit.length > 0) {
       const now = Date.now()
-      await Promise.all(hit.map((goal) => saveGoal({ ...goal, achievedAt: now })))
+      const saved = await Promise.all(hit.map((goal) => saveGoal({ ...goal, achievedAt: now })))
+      for (const goal of saved) void pushRecord('goal', goal.id, goal)
       for (const goal of hit) goal.achievedAt = now
     }
     setHistory(h)
@@ -85,7 +88,13 @@ export default function App() {
 
   useEffect(() => {
     refresh()
-      .then(() => setReady(true))
+      .then(async () => {
+        // Settle which cloud bucket this device uses before the first sync: a
+        // brand-new install gets a random private key, an install that already
+        // has history stays on the shared bucket until it opts in.
+        initSyncMode((await getHistory()).length > 0)
+        setReady(true)
+      })
       .then(() => syncNow())
   }, [refresh, syncNow])
 
@@ -136,7 +145,7 @@ export default function App() {
         ) : (
           <>
             {tab === 'today' && (
-              <TodayScreen history={history} settings={settings} startWorkout={setActive} />
+              <TodayScreen history={history} settings={settings} bodyLog={bodyLog} startWorkout={setActive} />
             )}
             {tab === 'log' && <LogScreen history={history} onChanged={refresh} />}
             {tab === 'stretch' && <StretchScreen />}

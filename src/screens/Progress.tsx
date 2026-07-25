@@ -7,6 +7,7 @@ import { MUSCLE_TARGETS, volumeStatus, weeklySetsByMuscle, type VolumeStatus } f
 import { projectGoal } from '../engine/goals'
 import { performancesOf } from '../engine/history'
 import { deleteGoal, saveBodyweight, saveGoal } from '../db/db'
+import { pushRecord } from '../db/sync'
 import { formatNum } from '../components/Stepper'
 import { TrashIcon } from '../components/Icons'
 
@@ -133,7 +134,8 @@ function BodyweightCard({ bodyLog, onChanged }: { bodyLog: BodyLog[]; onChanged:
   const save = async () => {
     const kg = Number(value)
     if (!Number.isFinite(kg) || kg <= 0) return
-    await saveBodyweight(kg)
+    const row = await saveBodyweight(kg)
+    void pushRecord('bodyweight', String(row.at), row)
     setValue('')
     await onChanged()
   }
@@ -170,11 +172,11 @@ function GoalsCard({ goals, history, bwAt, now, onChanged }: {
   const [adding, setAdding] = useState(false)
 
   const remove = async (id: string) => {
-    await deleteGoal(id)
+    void pushRecord('goal', id, await deleteGoal(id))
     await onChanged()
   }
   const add = async (goal: Goal) => {
-    await saveGoal(goal)
+    void pushRecord('goal', goal.id, await saveGoal(goal))
     await onChanged()
     setAdding(false)
   }

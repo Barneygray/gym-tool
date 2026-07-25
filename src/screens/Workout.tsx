@@ -1,20 +1,24 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { BodyLog, Session, SetLog, Settings } from '../types'
+import { FREESTYLE } from '../types'
 import { getExercise, isBodyweightLoaded } from '../data/exercises'
 import { dayById } from '../data/days'
+import { swapOptions } from '../engine/rotation'
 import { suggestFor } from '../engine/progression'
 import { phaseFor } from '../engine/mesocycle'
 import { warmupRamp } from '../engine/warmup'
 import { platesPerSide } from '../engine/plates'
 import { newPRsInSession } from '../engine/stats'
 import { bodyweightAt, latestBodyweight } from '../engine/bodyweight'
+import { readinessEffect } from '../engine/readiness'
 import { saveSession } from '../db/db'
 import { pushSession } from '../db/sync'
 import { useWakeLock } from '../hooks/useWakeLock'
 import { Stepper, formatNum } from '../components/Stepper'
 import { RestTimer } from '../components/RestTimer'
+import { ExercisePicker } from '../components/ExercisePicker'
 import { nextPartner } from '../engine/superset'
-import { BackIcon, TrashIcon } from '../components/Icons'
+import { BackIcon, CloseIcon, SwapIcon, TrashIcon } from '../components/Icons'
 import type { ActiveWorkout } from '../App'
 
 const KIND_LABEL = {
@@ -30,9 +34,47 @@ interface WorkoutProps {
   onFinished: () => Promise<void>
 }
 
-export function WorkoutScreen({ active, setActive, history, settings, bodyLog, onFinished }: WorkoutProps) {
+const dayName = (dayType: string) =>
+  dayType === FREESTYLE ? 'Freestyle' : dayById.get(dayType)?.name ?? dayType
+
+export function WorkoutScreen(props: WorkoutProps) {
+  // A freestyle session starts with nothing prescribed, and any session can be
+  // emptied by dropping its last exercise — both land here.
+  if (props.active.exerciseIds.length === 0) return <EmptyWorkout {...props} />
+  return <ActiveSession {...props} />
+}
+
+/** The station picker shown when a session has no exercises yet. */
+function EmptyWorkout({ active, setActive }: WorkoutProps) {
+  const add = (id: string) =>
+    setActive({ ...active, exerciseIds: [id], currentIndex: 0 })
+
+  return (
+    <>
+      <div className="workout-header">
+        <button onClick={() => setActive(null)} aria-label="Leave session"><BackIcon /></button>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontWeight: 700 }}>{dayName(active.dayType)}</div>
+          <div className="count num">0 exercises</div>
+        </div>
+        <span style={{ width: 24 }} />
+      </div>
+
+      <h1 className="screen-title" style={{ fontSize: 24 }}>What are you starting with?</h1>
+      <p className="screen-sub">
+        Pick a lift and go. Add more as you work through the session — nothing here is fixed.
+      </p>
+
+      <ExercisePicker existing={[]} onPick={add} onCancel={() => setActive(null)} />
+    </>
+  )
+}
+
+function ActiveSession({ active, setActive, history, settings, bodyLog, onFinished }: WorkoutProps) {
   const [summary, setSummary] = useState<{ session: Session; prs: ReturnType<typeof newPRsInSession> } | null>(null)
   const [rest, setRest] = useState<{ startedAt: number; durationSec: number } | null>(null)
+  /** 'add' appends a station; 'swap' replaces the current one. */
+  const [picking, setPicking] = useState<'add' | 'swap' | null>(null)
 
   // Keep the screen awake while training so the rest timer survives idle time.
   useWakeLock(summary === null)
@@ -40,9 +82,14 @@ export function WorkoutScreen({ active, setActive, history, settings, bodyLog, o
   const bwAt = useMemo(() => bodyweightAt(bodyLog), [bodyLog])
   const bodyweight = useMemo(() => latestBodyweight(bodyLog), [bodyLog])
 
-  const exercise = getExercise(active.exerciseIds[active.currentIndex])
+  const index = Math.min(active.currentIndex, active.exerciseIds.length - 1)
+  const exercise = getExercise(active.exerciseIds[index])
   const phase = useMemo(() => phaseFor(settings.meso, active.startedAt), [settings.meso, active.startedAt])
-  const suggestion = useMemo(() => suggestFor(exercise, history, settings, phase), [exercise, history, settings, phase])
+  const readiness = active.readiness ?? null
+  const suggestion = useMemo(
+    () => suggestFor(exercise, history, settings, phase, { bwAt, readiness }),
+    [exercise, history, settings, phase, bwAt, readiness],
+  )
   const loggedSets = active.logged[exercise.id] ?? []
 
   // Superset: the group this exercise belongs to, and the partner to alternate
@@ -136,7 +183,7 @@ export function WorkoutScreen({ active, setActive, history, settings, bodyLog, o
   }
 
   const go = (delta: number) => {
-    const next = active.currentIndex + delta
+    const next = index + delta
     if (next >= 0 && next < active.exerciseIds.length) {
       setActive({ ...active, currentIndex: next })
       setRest(null)
@@ -149,6 +196,53 @@ export function WorkoutScreen({ active, setActive, history, settings, bodyLog, o
       setActive({ ...active, currentIndex: idx })
       setRest(null)
     }
+  }
+
+  // ── Reshaping the session mid-workout ─────────────────
+  // The plan you walked in with rarely survives a busy gym. Adding, swapping,
+  // and dropping stations are all available here, not just in the pre-session
+  // preview. Anything with sets logged against it is protected: swapping or
+  // dropping it would strand that work, so those actions are offered only while
+  // the station is still untouched.
+
+  const addExercise = (id: string) => {
+    setPicking(null)
+    if (active.exerciseIds.includes(id)) {
+      goToId(id)
+      return
+    }
+    const ids = [...active.exerciseIds]
+    ids.splice(index + 1, 0, id)
+    setActive({ ...active, exerciseIds: ids, currentIndex: index + 1 })
+    setRest(null)
+  }
+
+  const swapExercise = (id: string) => {
+    setPicking(null)
+    if (active.exerciseIds.includes(id)) return
+    const ids = active.exerciseIds.map((existing, i) => (i === index ? id : existing))
+    const { [exercise.id]: _dropped, ...logged } = active.logged
+    setActive({
+      ...active,
+      exerciseIds: ids,
+      logged,
+      // A swapped-out lift can't stay in a superset pairing that no longer exists.
+      supersets: active.supersets?.map((g) => g.filter((gid) => gid !== exercise.id)).filter((g) => g.length > 1),
+    })
+    setRest(null)
+  }
+
+  const dropExercise = () => {
+    const ids = active.exerciseIds.filter((_, i) => i !== index)
+    const { [exercise.id]: _dropped, ...logged } = active.logged
+    setActive({
+      ...active,
+      exerciseIds: ids,
+      logged,
+      currentIndex: Math.max(0, Math.min(index, ids.length - 1)),
+      supersets: active.supersets?.map((g) => g.filter((gid) => gid !== exercise.id)).filter((g) => g.length > 1),
+    })
+    setRest(null)
   }
 
   const finish = async () => {
@@ -165,6 +259,7 @@ export function WorkoutScreen({ active, setActive, history, settings, bodyLog, o
       startedAt: active.startedAt,
       finishedAt: Date.now(),
       entries,
+      ...(active.readiness ? { readiness: active.readiness } : {}),
     }
     await saveSession(session)
     void pushSession(session)
@@ -178,19 +273,20 @@ export function WorkoutScreen({ active, setActive, history, settings, bodyLog, o
     return <SummaryView summary={summary} dayType={active.dayType} onDone={() => setActive(null)} />
   }
 
-  const dayName = dayById.get(active.dayType)?.name ?? active.dayType
-  const isLast = active.currentIndex === active.exerciseIds.length - 1
+  const isLast = index === active.exerciseIds.length - 1
+  const untouched = loggedSets.length === 0
+  const ready = readinessEffect(readiness)
 
   return (
     <>
       <div className="workout-header">
-        <button onClick={() => go(-1)} disabled={active.currentIndex === 0}
-          style={{ color: active.currentIndex === 0 ? 'var(--text-faint)' : 'var(--text)' }}>
+        <button onClick={() => go(-1)} disabled={index === 0}
+          style={{ color: index === 0 ? 'var(--text-faint)' : 'var(--text)' }}>
           <BackIcon />
         </button>
         <div style={{ textAlign: 'center' }}>
-          <div style={{ fontWeight: 700 }}>{dayName}</div>
-          <div className="count num">{active.currentIndex + 1} / {active.exerciseIds.length}</div>
+          <div style={{ fontWeight: 700 }}>{dayName(active.dayType)}</div>
+          <div className="count num">{index + 1} / {active.exerciseIds.length}</div>
         </div>
         <button className="btn-small" onClick={finish}>Finish</button>
       </div>
@@ -198,11 +294,43 @@ export function WorkoutScreen({ active, setActive, history, settings, bodyLog, o
       <h1 className="screen-title" style={{ fontSize: 24 }}>{exercise.name}</h1>
       <p className="screen-sub" style={{ marginBottom: superset ? 8 : 14 }}>{exercise.cue}</p>
 
+      <div className="station-actions">
+        <button className="btn-small" onClick={() => setPicking(picking === 'add' ? null : 'add')}>
+          + Add exercise
+        </button>
+        {untouched && (
+          <>
+            <button className="btn-small" onClick={() => setPicking(picking === 'swap' ? null : 'swap')}>
+              <SwapIcon size={14} /> Swap
+            </button>
+            {active.exerciseIds.length > 1 && (
+              <button className="btn-small" onClick={dropExercise}>
+                <CloseIcon size={14} /> Skip
+              </button>
+            )}
+          </>
+        )}
+      </div>
+
+      {picking && (
+        <ExercisePicker
+          existing={picking === 'swap' ? active.exerciseIds : active.exerciseIds}
+          suggested={picking === 'swap' ? swapOptions(exercise.id, active.exerciseIds) : []}
+          placeholder={picking === 'swap' ? 'Swap for…' : 'Add an exercise…'}
+          onPick={picking === 'swap' ? swapExercise : addExercise}
+          onCancel={() => setPicking(null)}
+        />
+      )}
+
       {superset && (
         <div className="super-banner">
           Superset · alternate with{' '}
           {superset.filter((id) => id !== exercise.id).map((id) => getExercise(id).name).join(', ')}
         </div>
+      )}
+
+      {ready && ready.level !== 'normal' && (
+        <div className="readiness-banner">Readiness: {ready.label}</div>
       )}
 
       <div className={`suggestion ${suggestion.kind}`}>
@@ -301,7 +429,7 @@ export function WorkoutScreen({ active, setActive, history, settings, bodyLog, o
       <div style={{ height: 16 }} />
       {!isLast ? (
         <button className="btn-ghost" onClick={() => go(1)}>
-          Next: {getExercise(active.exerciseIds[active.currentIndex + 1]).name}
+          Next: {getExercise(active.exerciseIds[index + 1]).name}
         </button>
       ) : (
         <button className="btn-ghost" onClick={finish}>Finish workout</button>
@@ -330,12 +458,11 @@ function SummaryView({ summary, dayType, onDone }: {
   const tonnage = session.entries.reduce(
     (t, e) => t + e.sets.reduce((s, x) => s + x.weight * x.reps, 0), 0)
   const mins = Math.round(((session.finishedAt ?? session.startedAt) - session.startedAt) / 60000)
-  const dayName = dayById.get(dayType as never)?.name ?? dayType
 
   return (
     <>
       <h1 className="screen-title">Session done</h1>
-      <p className="screen-sub">{dayName} — logged and folded into your next suggestions.</p>
+      <p className="screen-sub">{dayName(dayType)} — logged and folded into your next suggestions.</p>
 
       <div className="summary-stat-row">
         <div className="summary-stat"><div className="v num">{totalSets}</div><div className="k">Sets</div></div>

@@ -15,8 +15,10 @@ tells you exactly what to lift next.
   tracking as the built-ins.
 - **Progressive overload engine (double progression)** — each exercise has a rep
   range; you add reps at a fixed weight until every set tops the range, then the
-  app bumps the weight and you rebuild. Logging RPE sharpens the jumps: an easy
-  top-of-range session earns a double increment.
+  app bumps the weight and you rebuild. RPE sharpens the jumps and is read across
+  your last few sessions rather than one: an easy top-of-range run earns a double
+  increment, a grind earns half of one, and untagged sessions get the plain
+  conservative increment.
 - **Mesocycle periodization** — opt into a training block (Setup → Training block)
   and the engine stops living session-to-session: accumulation weeks ramp your
   prescribed set count while the final week auto-schedules a planned deload
@@ -30,10 +32,24 @@ tells you exactly what to lift next.
 - **Weekly plan with rest days** — set how many sessions a week you train (Setup →
   Weekly plan) and the Train screen lays out a Mon–Sun plan, spacing the day
   templates across training days and marking the rest days between them. Today is
-  highlighted and each planned session is one tap from starting.
+  highlighted and each planned session is one tap from starting. Or build the
+  week by hand: every weekday gets a dropdown over *all* your day templates,
+  custom ones included, so a bespoke program actually drives the plan instead of
+  being crowded out by the built-in split.
 - **Supersets** — link two exercises in the workout preview and the session
   alternates between them: a superset badge on each, and the rest timer offers a
   one-tap jump to the paired lift instead of waiting out the clock.
+- **The session bends to the gym** — the plan you walked in with rarely survives a
+  busy Monday. Mid-workout you can add a station, swap the current one for a
+  like-for-like alternative, or skip it outright; anything you've already logged
+  sets against is protected from a swap or skip so the work can't be stranded.
+  And when there's no plan at all, **Freestyle** starts an empty session you build
+  as you go — the same progression engine, warm-ups, PRs, and stats apply.
+- **Readiness check** (opt in, Setup → Autoregulation) — the log can't see that
+  you slept four hours. Rate how you feel before a session and the day's
+  prescription bends to match: a rough day trims a set and backs the load off
+  10%, a good one earns an extra set. It multiplies with the mesocycle phase, and
+  stays deliberately conservative.
 - **Goals with projections** — set an estimated-1RM target for any lift (Progress
   → Goals) and Forge fits your e1RM trend to project *when* you'll hit it, flags
   whether you're on pace against an optional deadline, and celebrates the goal
@@ -47,7 +63,9 @@ tells you exactly what to lift next.
   in Setup) fires a notification when rest is up even if the app is backgrounded
   or the screen is off.
 - **Stall detection** — three sessions without progress on a lift triggers a
-  deload-and-rebuild suggestion (or swap to a sibling variation).
+  deload-and-rebuild suggestion (or swap to a sibling variation). Progress is
+  judged on *effective* load, so holding your pull-up reps through a bodyweight
+  gain reads as the progress it is, instead of being mistaken for a stall.
 - **Muscle freshness + a coach** — the home screen shows days-since-trained per
   muscle *and* recommends what to train next, picking the day whose muscles are
   most rested and flagging anything gone overdue.
@@ -70,16 +88,16 @@ tells you exactly what to lift next.
 - **Condition tab** — kettlebell, plyometric, and core/spinal-health movements,
   loggable so frequency is tracked.
 - **Your data, yours** — everything lives on-device (IndexedDB); one-tap JSON
-  export/import in Settings carries sessions, settings, custom exercises, and
-  bodyweight. (Custom exercises and the bodyweight log are device-local and
-  travel via export/import; sessions and settings also get zero-setup cloud
-  backup below.)
-- **Zero-setup cloud backup** — sessions also sync to a Supabase table
-  automatically, with no sign-in. Every device that opens the app shares one
-  data bucket, so a lost or replaced phone gets its full history back the moment
-  it opens the app. Sync reconciles by write time, so edits and deletions
-  propagate too (not just new sessions), and any backup failure is surfaced in
-  Settings instead of failing silently. See "Cloud backup" below.
+  export/import in Settings carries the lot. A restore tells you exactly what the
+  file holds and what it will replace *before* it runs, refuses anything
+  malformed without touching a table, and keeps a snapshot so **Undo last
+  restore** puts things back if it was the wrong file.
+- **Zero-setup cloud backup** — everything syncs to Supabase automatically, with
+  no sign-in: sessions, settings, custom exercises, custom days, goals, and the
+  bodyweight log. A lost or replaced phone gets the whole picture back, not just
+  sessions whose custom exercises have gone missing. Sync reconciles by write
+  time, so edits and deletions propagate too, and any backup failure is surfaced
+  in Settings instead of failing silently. See "Cloud backup" below.
 
 ## Stack
 
@@ -103,28 +121,32 @@ your phone and "Add to Home Screen" — it runs full-screen and fully offline.
 
 ## Cloud backup
 
-Backup is on by default and needs no sign-in. The app shares one data bucket
-keyed by a constant (`OWNER` in `src/db/sync.ts`) and syncs every session to
-Supabase under it, so any device that opens the app both backs up and restores
-automatically. Sync runs on app open and after each logged session or settings
-change, and fails silently when offline (the next sync reconciles). Settings
-also has a manual **Sync now** button.
+Backup is on by default and needs no sign-in. Every record — sessions, settings,
+custom exercises, custom days, goals, bodyweight — syncs to Supabase under an
+`owner` bucket, so any device holding your key both backs up and restores
+automatically. Sync runs on app open and after each change, and fails silently
+when offline (the next sync reconciles). Settings also has a manual **Sync now**
+button.
 
 One-time setup (already done for the bundled project): create a Supabase
 project, drop its URL + anon key into `src/db/supabaseClient.ts`, and run
-`supabase-schema.sql` once in the SQL Editor. That's the whole backend.
+`supabase-schema.sql` once in the SQL Editor. That's the whole backend. The
+script is idempotent and non-destructive, so it's safe to re-run against a
+project that already holds history.
 
-**Privacy trade-off:** by default every install shares one public bucket keyed
-by a constant, and the anon key ships in the app's public code, so anyone who
-found the app's URL and inspected it could read or overwrite the data. For a
-personal training log on an obscure URL that's an accepted trade for
-zero-friction, no-login backup.
+**Your bucket is private by default.** A fresh install generates a random key on
+first run and syncs to a bucket named `forge-<sha256(key)>` — a value that never
+ships in the bundle and that the server never sees in plaintext. Reaching your
+data needs the key, not just the app's URL.
 
-**Private sync key (opt-in hardening):** Setup → Cloud Backup lets you set a
-passphrase. When set, your backup is scoped to a bucket derived from
-`forge-<sha256(passphrase)>` — the key is held only in the device's
-`localStorage` and never ships in the bundle, so reaching your rows now requires
-the passphrase, not just the URL. Use the same passphrase on every device to
-share history; changing it re-syncs your local data up under the new bucket. The
-passphrase is device-local (it travels via neither cloud sync nor JSON
-export/import), so set it once per device.
+To train across devices, open Setup → Cloud Backup on the device that has your
+history, reveal and copy the key, and enter it on the other device. Keep a copy
+somewhere safe: lose it and the device you're holding still has your data, but no
+*new* device can reach the backup.
+
+**Installs that predate this** stay on the old shared bucket (`forge-owner`)
+rather than being silently re-keyed away from their own history. That bucket's
+name ships in the app's public code, so anyone who found the URL could read or
+overwrite it — Setup → Cloud Backup offers a one-tap switch to a private bucket,
+which re-uploads your local data under the new key. You can switch back, with a
+warning about what you're giving up.
