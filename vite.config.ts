@@ -26,6 +26,9 @@ export default defineConfig(({ mode }) => ({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
+        // Rest alerts have to fire from the worker, not the page — a
+        // backgrounded tab's timers are frozen. See public/rest-sw.js.
+        importScripts: ['rest-sw.js'],
       },
     }),
   ],
