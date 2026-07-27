@@ -8,7 +8,7 @@ import {
   summarizeBackup, summarizeLocal, undoRestore, wipeAll,
 } from '../db/db'
 import { DAYS } from '../data/days'
-import { EXERCISES, makeCustomExercise } from '../data/exercises'
+import { EXERCISES, loadBasisTag, makeCustomExercise } from '../data/exercises'
 import { makeCustomDay } from '../data/days'
 import { phaseFor } from '../engine/mesocycle'
 import { autoWeekPlan, clampFrequency, defaultSplit, dayLabel } from '../engine/schedule'
@@ -549,6 +549,7 @@ function CustomExercises({ onChanged }: { onChanged: () => Promise<void> }) {
             <div className="k">{e.name}</div>
             <div className="sub">
               {MUSCLE_LABEL[e.primary]} · {EQUIPMENT_LABEL[e.equipment]} · {e.repRange[0]}–{e.repRange[1]} reps
+              {loadBasisTag(e) && ` · ${loadBasisTag(e)}`}
             </div>
           </div>
           <button className="set-del" aria-label={`Delete ${e.name}`} onClick={() => remove(e.id)}>
@@ -579,14 +580,22 @@ function ExerciseForm({ onSave, onCancel }: {
   const [lo, setLo] = useState('8')
   const [hi, setHi] = useState('12')
   const [isCompound, setIsCompound] = useState(false)
+  const [bothHands, setBothHands] = useState(true)
   const [cue, setCue] = useState('')
+
+  // Only hand-held lifts have the question to answer; a bar or a stack is just
+  // the weight. Kept out of `makeCustomExercise`'s way for anything else.
+  const handHeld = equipment === 'dumbbell' || equipment === 'kettlebell'
 
   const valid = name.trim().length > 0 && Number(lo) > 0 && Number(hi) >= Number(lo)
 
   const submit = async () => {
     if (!valid) return
     const repRange: [number, number] = [Math.round(Number(lo)), Math.round(Number(hi))]
-    await onSave(makeCustomExercise({ name, primary, equipment, repRange, isCompound, cue }))
+    await onSave(makeCustomExercise({
+      name, primary, equipment, repRange, isCompound, cue,
+      loadBasis: handHeld && !bothHands ? 'single' : 'per-hand',
+    }))
   }
 
   return (
@@ -619,6 +628,17 @@ function ExerciseForm({ onSave, onCancel }: {
         <span className={`toggle${isCompound ? ' on' : ''}`} />
         <span>Compound lift (adds warm-up ramps)</span>
       </button>
+      {handHeld && (
+        <button type="button" className="ex-form-check" role="switch" aria-checked={bothHands}
+          onClick={() => setBothHands((b) => !b)}>
+          <span className={`toggle${bothHands ? ' on' : ''}`} />
+          <span>
+            {bothHands
+              ? 'One in each hand — log a single bell’s weight'
+              : 'One bell only — log that bell’s weight'}
+          </span>
+        </button>
+      )}
       <input placeholder="Coaching cue (optional)" value={cue} onChange={(e) => setCue(e.target.value)} />
       <div style={{ display: 'flex', gap: 'var(--s2)', marginTop: 'var(--s2)' }}>
         <button className="btn-small" style={{ flex: 1 }} onClick={onCancel}>Cancel</button>

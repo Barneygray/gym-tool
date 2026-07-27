@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import type { BodyLog, DayId, Muscle, ReadinessLevel, Session, Settings } from '../types'
 import { FREESTYLE } from '../types'
 import { DAYS, dayById } from '../data/days'
-import { EXERCISES, getExercise } from '../data/exercises'
+import { EXERCISES, getExercise, loadBasisTag } from '../data/exercises'
 import { generateWorkout, swapOptions } from '../engine/rotation'
 import { suggestFor } from '../engine/progression'
 import { recommendDay } from '../engine/coach'
@@ -371,6 +371,7 @@ function WorkoutPreview({ dayType, history, settings, phase, bwAt, onClose, onSt
             const suggestion = suggestFor(exercise, history, settings, phase, { bwAt, readiness })
             const gi = groupIndexOf(id)
             const linkedUp = joined.has(id) && gi >= 0
+            const basisTag = loadBasisTag(exercise)
             return (
               <div key={id}>
                 {/* The link control sits *on* the hairline between two rows.
@@ -396,6 +397,7 @@ function WorkoutPreview({ dayType, history, settings, phase, bwAt, onClose, onSt
                       {suggestion.kind === 'start'
                         ? `${suggestion.sets} × ${suggestion.targetReps} · find your weight`
                         : `${suggestion.sets} × ${suggestion.targetReps} @ ${formatNum(suggestion.weight)} kg`}
+                      {basisTag && ` · ${basisTag}`}
                     </div>
                   </div>
                   <span className="muscle-tag">{MUSCLE_LABEL[exercise.primary]}</span>

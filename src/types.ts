@@ -50,6 +50,21 @@ export type Equipment =
   | 'bodyweight'
   | 'kettlebell'
 
+/**
+ * What a logged weight refers to on hand-held equipment, where "40 kg" says
+ * nothing until you know whether it means the pair or one bell.
+ *
+ * 'per-hand' — a bell in each hand; the logged weight is ONE of them, which is
+ *   how everyone quotes dumbbell work ("dumbbell bench at 40" means two 40s)
+ *   and what the increments and rounding in this app assume.
+ * 'single' — one bell in play, whether that's one-armed work or two hands
+ *   under a single dumbbell; the logged weight is that bell.
+ *
+ * Nothing in the math branches on this — it exists so the app can say which
+ * one it means everywhere a dumbbell weight is shown or typed in.
+ */
+export type LoadBasis = 'per-hand' | 'single'
+
 export interface Exercise extends SyncMeta {
   id: string
   name: string
@@ -65,6 +80,12 @@ export interface Exercise extends SyncMeta {
   isCompound: boolean
   /** Loaded on a bar — enables plate math and percentage warm-ups. */
   barLoaded: boolean
+  /**
+   * Hand-held load convention; see `LoadBasis`. Absent on a dumbbell or
+   * kettlebell lift means 'per-hand', and it means nothing at all on bars,
+   * cables and machines — so read it through `loadBasisOf`, not directly.
+   */
+  loadBasis?: LoadBasis
   cue: string
   /**
    * Conditioning work rather than a prescribable gym lift. These live in the

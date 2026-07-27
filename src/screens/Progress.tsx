@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react'
 import type { BodyLog, Goal, Muscle, Session } from '../types'
-import { EXERCISES, getExercise } from '../data/exercises'
+import { EXERCISES, getExercise, loadBasisTag } from '../data/exercises'
 import {
   E1RM_MAX_REPS, REP_BUCKETS, e1rmTrend, prsFor, volumeByMuscle, type E1rmPoint,
 } from '../engine/stats'
@@ -60,6 +60,7 @@ export function ProgressScreen({ history, bodyLog, goals, onChanged }: {
 
   const now = Date.now()
   const trend = exerciseId ? e1rmTrend(exerciseId, history, bwAt) : []
+  const basisTag = exerciseId ? loadBasisTag(getExercise(exerciseId)) : null
 
   return (
     <>
@@ -80,6 +81,7 @@ export function ProgressScreen({ history, bodyLog, goals, onChanged }: {
             <div className="chart-sub">
               {getExercise(exerciseId).name} — Epley, best set per session. Reliable to
               about {E1RM_MAX_REPS} reps; past that read it as a trend, not a true 1RM.
+              {basisTag && ` Loads are ${basisTag}.`}
             </div>
             <E1rmChart points={trend} />
           </div>
@@ -137,9 +139,13 @@ export function ProgressScreen({ history, bodyLog, goals, onChanged }: {
                 {trained.map((e) => {
                   const pr = prsFor(e.id, history, bwAt)
                   if (!pr.maxWeight) return null
+                  const tag = loadBasisTag(e)
                   return (
                     <tr key={e.id}>
-                      <th scope="row" className="ex">{e.name}</th>
+                      <th scope="row" className="ex">
+                        {e.name}
+                        {tag && <span className="reps">{tag}</span>}
+                      </th>
                       {REP_BUCKETS.map((b) => {
                         const best = pr.byBucket[b.id]
                         return (
