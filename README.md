@@ -74,9 +74,11 @@ tells you exactly what to lift next.
   button, not just advice.
 - **Smart in-workout tools** — warm-up ramps for compounds, per-side plate math,
   auto-starting rest timer with chime/vibration, per-set RPE and notes. The
-  timer holds a screen wake lock so the phone won't sleep mid-set, and (opt-in
-  in Setup) fires a notification when rest is up even if the app is backgrounded
-  or the screen is off.
+  rest belongs to the session rather than one station, so it keeps counting
+  while you walk to the next lift or add an exercise — naming where it came
+  from once you've moved on. The timer holds a screen wake lock so the phone
+  won't sleep mid-set, and (opt-in in Setup) fires a notification when rest is
+  up even if the app is backgrounded or the screen is off.
 - **Stall detection** — three sessions without progress on a lift triggers a
   deload-and-rebuild suggestion (or swap to a sibling variation). Progress is
   judged on *effective* load, so holding your pull-up reps through a bodyweight
