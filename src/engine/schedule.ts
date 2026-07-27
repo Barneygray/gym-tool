@@ -1,8 +1,6 @@
 import type { DayId, DayType, Session, Settings, WeekPlan } from '../types'
 import { DAYS, dayById } from '../data/days'
 
-const DAY = 86_400_000
-
 /**
  * Default splits per weekly frequency, chosen from the five built-in day
  * templates to spread muscle groups sensibly. Higher frequencies repeat the
@@ -41,8 +39,20 @@ export function defaultSplit(frequency: number): DayType[] {
 }
 
 /** Start-of-day epoch for a timestamp (local). */
-function startOfDay(ts: number): number {
+export function startOfDay(ts: number): number {
   const d = new Date(ts)
+  d.setHours(0, 0, 0, 0)
+  return d.getTime()
+}
+
+/**
+ * The start of the day `n` days after `dayStart`. Calendar arithmetic, not
+ * `+ n * DAY`: on the two days a year the clocks change, a day isn't 24 hours
+ * and the fixed-offset version lands an hour either side of midnight.
+ */
+function addDays(dayStart: number, n: number): number {
+  const d = new Date(dayStart)
+  d.setDate(d.getDate() + n)
   d.setHours(0, 0, 0, 0)
   return d.getTime()
 }
@@ -52,15 +62,27 @@ export function mondayIndex(ts: number): number {
   return (new Date(ts).getDay() + 6) % 7
 }
 
+/** Start of the Monday of the week containing `ts` (local). */
+export function startOfWeek(ts: number): number {
+  return addDays(startOfDay(ts), -mondayIndex(ts))
+}
+
 /**
  * Where to resume the split rotation: the position just after the most recent
  * session the split actually contains. Sessions outside the split —
  * conditioning, freestyle, a custom day run off-plan — are skipped rather than
  * counted as a miss, so an off-plan session no longer silently resets the
  * rotation to the top of the week.
+ *
+ * `before` bounds how recent a session may be to count. Callers laying out a
+ * week pass that week's Monday: the rotation has to be decided by what happened
+ * *before* the week began, or every session logged during it would shuffle the
+ * days around it — see `resolveWeekPlan`.
  */
-export function rotationStart(history: Session[], split: DayId[]): number {
-  const sorted = [...history].sort((a, b) => b.startedAt - a.startedAt)
+export function rotationStart(history: Session[], split: DayId[], before = Infinity): number {
+  const sorted = [...history]
+    .filter((s) => s.startedAt < before)
+    .sort((a, b) => b.startedAt - a.startedAt)
   for (const session of sorted) {
     const idx = split.indexOf(session.dayType as DayId)
     if (idx >= 0) return (idx + 1) % split.length
@@ -116,12 +138,23 @@ export function sanitizeWeekPlan(plan: WeekPlan | null | undefined): WeekPlan | 
 /**
  * The week's layout for these settings: the hand-built plan when there is a
  * valid one, otherwise the frequency-derived automatic plan.
+ *
+ * The automatic plan is anchored to the Monday of the week containing `now`:
+ * only sessions from before that Monday move the rotation on. A week is a
+ * layout you train *against*, so it has to hold still while you train it —
+ * resuming from the very latest session instead meant finishing Monday's push
+ * rotated the whole strip under you, relabelling Monday as pull and pushing
+ * push out to Friday, as if the session you'd just logged had never happened.
  */
-export function resolveWeekPlan(settings: Settings, history: Session[]): WeekPlan {
+export function resolveWeekPlan(
+  settings: Settings,
+  history: Session[],
+  now = Date.now(),
+): WeekPlan {
   const custom = sanitizeWeekPlan(settings.weekPlan)
   if (custom) return custom
   const freq = clampFrequency(settings.weeklyFrequency ?? DEFAULT_FREQUENCY)
-  return autoWeekPlan(freq, rotationStart(history, defaultSplit(freq)))
+  return autoWeekPlan(freq, rotationStart(history, defaultSplit(freq), startOfWeek(now)))
 }
 
 /**
@@ -137,10 +170,10 @@ export function weeklyPlan(
 ): PlannedDay[] {
   const slots = override && override.length === 7 ? override : autoWeekPlan(frequency, rotStart)
   const todayStart = startOfDay(now)
-  const mondayStart = todayStart - mondayIndex(now) * DAY
+  const mondayStart = startOfWeek(now)
 
   return slots.map((dayType, wd) => {
-    const date = mondayStart + wd * DAY
+    const date = addDays(mondayStart, wd)
     return { date, weekday: wd, dayType: dayType ?? null, isToday: date === todayStart }
   })
 }

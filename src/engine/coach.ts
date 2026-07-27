@@ -1,5 +1,6 @@
 import type { DayId, Muscle, Session, WeekPlan } from '../types'
 import { DAYS, dayById } from '../data/days'
+import { startOfDay } from './schedule'
 import { recoveryByMuscle } from './stats'
 import { MUSCLE_TARGETS, underVolumeMuscles, weeklySetsByMuscle } from './volume'
 import { staleGroups } from './mobility'
@@ -50,9 +51,10 @@ export interface CoachOptions {
  * today's planned muscles were hammered yesterday instead of quietly going
  * along with it.
  *
- * With no plan, or on a planned rest day, it falls back to the freshest day —
- * now nudged by weekly volume, so a day whose muscles still owe the week sets
- * wins a near-tie against one that's already well fed.
+ * With no plan, on a planned rest day, or once today's planned session is
+ * already logged, it falls back to the freshest day — now nudged by weekly
+ * volume, so a day whose muscles still owe the week sets wins a near-tie
+ * against one that's already well fed.
  */
 export function recommendDay(
   history: Session[],
@@ -87,8 +89,13 @@ export function recommendDay(
   const hasPlan = options.plan != null && options.weekday !== undefined
   const plannedId = hasPlan ? options.plan![options.weekday!] : null
   const planned = plannedId ? dayById.get(plannedId) : undefined
+  // Today's plan, once you've actually done it, is history rather than advice.
+  const today = startOfDay(now)
+  const planDone =
+    planned !== undefined &&
+    history.some((s) => s.dayType === planned.id && startOfDay(s.startedAt) === today)
 
-  if (planned) {
+  if (planned && !planDone) {
     const rested = restedness(planned)
     let conflict: DayRecommendation['conflict'] = null
     if (!fresh && rested < SORE) {
@@ -114,7 +121,7 @@ export function recommendDay(
     }
   }
 
-  // ── No plan for today: freshest day, nudged by volume ──
+  // ── Nothing planned for today, or it's already done: freshest day, nudged by volume ──
   const best = bestBy(DAYS, restedness, short) ?? DAYS[0]
 
   return {
@@ -122,9 +129,11 @@ export function recommendDay(
     dayName: best.name,
     headline: fresh
       ? 'Start here'
-      : hasPlan
-        ? `Rest day — ${best.name} if you're training anyway`
-        : `${best.name} is your freshest option`,
+      : planDone
+        ? `${planned!.name} done — ${best.name} if you're training again`
+        : hasPlan
+          ? `Rest day — ${best.name} if you're training anyway`
+          : `${best.name} is your freshest option`,
     reason: fresh ? 'Everything’s fresh — a clean place to start.' : topTwo(best.muscles),
     overdue,
     underVolume,

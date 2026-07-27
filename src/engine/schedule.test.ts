@@ -1,8 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import type { Session, SetLog } from '../types'
+import type { Session, Settings, SetLog } from '../types'
+import { DEFAULT_SETTINGS } from '../db/db'
 import {
-  clampFrequency, defaultSplit, weeklyPlan, rotationStart, nextTrainingDay, mondayIndex,
+  clampFrequency, defaultSplit, weeklyPlan, resolveWeekPlan, rotationStart, nextTrainingDay,
+  mondayIndex, startOfWeek,
 } from './schedule'
+import { recommendDay } from './coach'
 import { buildSupersets, nextPartner } from './superset'
 
 const DAY = 86_400_000
@@ -55,6 +58,79 @@ describe('weekly schedule', () => {
   it('mondayIndex maps Monday to 0 (timezone-independent)', () => {
     const monday = Date.UTC(2026, 6, 20)
     expect(mondayIndex(monday)).toBe((new Date(monday).getDay() + 6) % 7)
+  })
+})
+
+// ── The week holds still while you train it ─────────────
+describe('week plan anchoring', () => {
+  // Local midnights, so the Monday/Wednesday/Friday slots line up with the
+  // weekdays the layout is asserted against whatever zone the tests run in.
+  const MONDAY = new Date(2026, 6, 27, 9, 0, 0).getTime()
+  const WEDNESDAY = new Date(2026, 6, 29, 9, 0, 0).getTime()
+  const LAST_SUNDAY = new Date(2026, 6, 26, 18, 0, 0).getTime()
+  const thrice: Settings = { ...DEFAULT_SETTINGS, weeklyFrequency: 3, weekPlan: undefined }
+
+  it('keeps the week put when a session is logged during it', () => {
+    // Monday push / Wednesday pull / Friday legs, before anything is logged.
+    const empty = resolveWeekPlan(thrice, [], MONDAY)
+    expect(empty).toEqual(['push', null, 'pull', null, 'legs', null, null])
+
+    // Logging Monday's push must not rotate the strip: the regression relabelled
+    // Monday as pull and shunted push out to Friday, hiding the session just
+    // logged and moving two days that had already been decided.
+    const afterPush = [session('push', MONDAY)]
+    expect(resolveWeekPlan(thrice, afterPush, MONDAY)).toEqual(empty)
+    // Still put when the week is looked at again on a later day.
+    expect(resolveWeekPlan(thrice, afterPush, WEDNESDAY)).toEqual(empty)
+  })
+
+  it('resumes the rotation from the week before, not from this week', () => {
+    // Last week finished on push, so this week opens on pull.
+    const plan = resolveWeekPlan(thrice, [session('push', LAST_SUNDAY)], MONDAY)
+    expect(plan).toEqual(['pull', null, 'legs', null, 'push', null, null])
+    // And logging that Monday pull leaves the rest of the week alone.
+    expect(resolveWeekPlan(thrice, [session('push', LAST_SUNDAY), session('pull', MONDAY)], MONDAY))
+      .toEqual(plan)
+  })
+
+  it('rotationStart ignores sessions at or after the cutoff', () => {
+    const split = defaultSplit(3)
+    const history = [session('push', LAST_SUNDAY), session('pull', MONDAY)]
+    expect(rotationStart(history, split)).toBe(2) // no cutoff: resumes after pull
+    expect(rotationStart(history, split, startOfWeek(MONDAY))).toBe(1) // after push
+    expect(rotationStart(history, split, startOfWeek(LAST_SUNDAY))).toBe(0)
+  })
+
+  it('a hand-built plan is fixed, so logging never touches it', () => {
+    const custom: Settings = {
+      ...DEFAULT_SETTINGS,
+      weekPlan: ['legs', null, 'push', null, 'pull', null, null],
+    }
+    expect(resolveWeekPlan(custom, [session('legs', MONDAY)], MONDAY))
+      .toEqual(['legs', null, 'push', null, 'pull', null, null])
+  })
+
+  it('does not offer today’s plan back once it has been trained', () => {
+    const plan = resolveWeekPlan(thrice, [], MONDAY)
+    const before = recommendDay([], MONDAY, { plan, weekday: mondayIndex(MONDAY) })
+    expect(before.fromPlan).toBe(true)
+    expect(before.dayType).toBe('push')
+
+    const after = recommendDay([session('push', MONDAY)], MONDAY, {
+      plan,
+      weekday: mondayIndex(MONDAY),
+    })
+    expect(after.fromPlan).toBe(false)
+    expect(after.dayType).not.toBe('push')
+    expect(after.headline).toContain('Push done')
+
+    // Yesterday's push is not today's: the plan still stands.
+    const yesterday = recommendDay([session('push', LAST_SUNDAY)], MONDAY, {
+      plan,
+      weekday: mondayIndex(MONDAY),
+    })
+    expect(yesterday.fromPlan).toBe(true)
+    expect(yesterday.dayType).toBe('push')
   })
 })
 
