@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { notifyRestDone } from '../notify'
+import { cancelRestAlert, notifyRestDone, scheduleRestAlert } from '../notify'
 
 interface RestTimerProps {
   /** Unix ms when the rest period started; changes retrigger the timer. */
@@ -24,6 +24,27 @@ export function RestTimer({ startedAt, durationSec, soundOn, onDismiss, partner 
   const elapsed = (now - startedAt) / 1000
   const remaining = Math.max(0, durationSec - elapsed)
   const done = remaining <= 0
+  const endsAt = startedAt + durationSec * 1000
+
+  // Lock the phone or switch apps and the interval above stops running, so this
+  // component can't be the thing that alerts you — it isn't awake to. Hand the
+  // deadline to the service worker for the whole rest, and add the
+  // timestamp-triggered alert (where supported) the moment we actually go off
+  // screen. Coming back cancels both: you're here, the timer speaks for itself.
+  useEffect(() => {
+    void scheduleRestAlert(endsAt, document.visibilityState === 'hidden')
+    const onLeave = () => {
+      if (document.visibilityState === 'hidden') void scheduleRestAlert(endsAt, true)
+      else void cancelRestAlert()
+    }
+    document.addEventListener('visibilitychange', onLeave)
+    window.addEventListener('pagehide', onLeave)
+    return () => {
+      document.removeEventListener('visibilitychange', onLeave)
+      window.removeEventListener('pagehide', onLeave)
+      void cancelRestAlert()
+    }
+  }, [endsAt])
 
   useEffect(() => {
     if (done && !beeped.current) {
