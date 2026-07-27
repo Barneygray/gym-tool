@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import type { DayId, Session, SetLog } from '../types'
 import { FREESTYLE, MOBILITY } from '../types'
-import { exerciseById, getExercise } from '../data/exercises'
+import { exerciseById, getExercise, loadBasisTag } from '../data/exercises'
 import { DAYS, dayById } from '../data/days'
 import { deleteSession, saveSession, updateSession } from '../db/db'
 import { pushSession } from '../db/sync'
@@ -225,38 +225,45 @@ function AddSession({ onClose, onChanged }: {
           </label>
         </div>
 
-        {entries.map((entry, ei) => (
-          <div className="log-entry" key={entry.exerciseId + ei}>
-            <div className="add-entry-head">
-              <div className="section-label" style={{ margin: 0 }}>{getExercise(entry.exerciseId).name}</div>
-              <button className="set-del" aria-label={`Remove ${getExercise(entry.exerciseId).name}`}
-                onClick={() => removeEntry(ei)}>
-                <TrashIcon size={16} />
-              </button>
-            </div>
-            {entry.sets.map((s, si) => (
-              <div className="log-set-row" key={si}>
-                <span className="idx num">S{si + 1}</span>
-                <label className="log-field">
-                  <input className="num" type="number" inputMode="decimal" value={s.weight}
-                    onChange={(e) => patchSet(ei, si, { weight: Number(e.target.value) || 0 })} />
-                  <span>kg</span>
-                </label>
-                <span className="times">×</span>
-                <label className="log-field">
-                  <input className="num" type="number" inputMode="numeric" value={s.reps || ''}
-                    onChange={(e) => patchSet(ei, si, { reps: Number(e.target.value) || 0 })} />
-                  <span>reps</span>
-                </label>
-                <button className="set-del" aria-label={`Delete set ${si + 1}`}
-                  onClick={() => removeSet(ei, si)}>
+        {entries.map((entry, ei) => {
+          const exercise = getExercise(entry.exerciseId)
+          const basisTag = loadBasisTag(exercise)
+          return (
+            <div className="log-entry" key={entry.exerciseId + ei}>
+              <div className="add-entry-head">
+                <div className="section-label" style={{ margin: 0 }}>
+                  <span>{exercise.name}</span>
+                  {basisTag && <span>{basisTag}</span>}
+                </div>
+                <button className="set-del" aria-label={`Remove ${exercise.name}`}
+                  onClick={() => removeEntry(ei)}>
                   <TrashIcon size={16} />
                 </button>
               </div>
-            ))}
-            <button className="btn-small" style={{ marginTop: 'var(--s2)' }} onClick={() => addSet(ei)}>+ Set</button>
-          </div>
-        ))}
+              {entry.sets.map((s, si) => (
+                <div className="log-set-row" key={si}>
+                  <span className="idx num">S{si + 1}</span>
+                  <label className="log-field">
+                    <input className="num" type="number" inputMode="decimal" value={s.weight}
+                      onChange={(e) => patchSet(ei, si, { weight: Number(e.target.value) || 0 })} />
+                    <span>kg</span>
+                  </label>
+                  <span className="times">×</span>
+                  <label className="log-field">
+                    <input className="num" type="number" inputMode="numeric" value={s.reps || ''}
+                      onChange={(e) => patchSet(ei, si, { reps: Number(e.target.value) || 0 })} />
+                    <span>reps</span>
+                  </label>
+                  <button className="set-del" aria-label={`Delete set ${si + 1}`}
+                    onClick={() => removeSet(ei, si)}>
+                    <TrashIcon size={16} />
+                  </button>
+                </div>
+              ))}
+              <button className="btn-small" style={{ marginTop: 'var(--s2)' }} onClick={() => addSet(ei)}>+ Set</button>
+            </div>
+          )
+        })}
 
         {picking ? (
           <ExercisePicker
@@ -342,10 +349,15 @@ function SessionDetail({ session, onClose, onChanged }: {
         </div>
 
         {entries.map((entry, ei) => {
-          const name = exerciseById.get(entry.exerciseId)?.name ?? entry.exerciseId
+          const exercise = exerciseById.get(entry.exerciseId)
+          const name = exercise?.name ?? entry.exerciseId
+          const basisTag = exercise ? loadBasisTag(exercise) : null
           return (
             <div className="log-entry" key={entry.exerciseId + ei}>
-              <div className="section-label" style={{ margin: 'var(--s5) 0 var(--s1)' }}>{name}</div>
+              <div className="section-label" style={{ margin: 'var(--s5) 0 var(--s1)' }}>
+                <span>{name}</span>
+                {basisTag && <span>{basisTag}</span>}
+              </div>
               {isConditioning ? (
                 <div className="log-cond num">Logged done</div>
               ) : entry.sets.length === 0 ? (

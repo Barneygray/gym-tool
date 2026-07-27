@@ -1,4 +1,4 @@
-import type { Exercise } from '../types'
+import type { Exercise, LoadBasis } from '../types'
 import { CONDITIONING_EXERCISES, CONDITIONING_IDS } from './conditioning'
 
 const ex = (
@@ -28,6 +28,13 @@ const ex = (
   cue,
 })
 
+/**
+ * Marks a hand-held lift where only one bell is in play — one-armed work, or
+ * two hands under a single dumbbell. Every other dumbbell lift in the catalog
+ * is a bell in each hand, so a logged weight is one of the pair.
+ */
+const single = (exercise: Exercise): Exercise => ({ ...exercise, loadBasis: 'single' })
+
 export const BUILTIN_EXERCISES: Exercise[] = [
   // ── Chest ─────────────────────────────────────────────
   ex('bench-press', 'Barbell Bench Press', 'chest', ['triceps', 'shoulders'], 'barbell', 'horizontal-press', [5, 8], 2.5, 180, true,
@@ -52,8 +59,8 @@ export const BUILTIN_EXERCISES: Exercise[] = [
     'Brace hard, bar against shins, push the floor away — hips and shoulders rise together.'),
   ex('barbell-row', 'Barbell Row', 'back', ['biceps'], 'barbell', 'horizontal-pull', [6, 10], 2.5, 180, true,
     'Hinge to ~45°, pull the bar to your lower ribs, squeeze the blades, no torso heave.'),
-  ex('db-row', 'One-Arm Dumbbell Row', 'back', ['biceps'], 'dumbbell', 'horizontal-pull', [8, 12], 2, 120, true,
-    'Long arm stretch at the bottom, drive the elbow to your hip, not your armpit.'),
+  single(ex('db-row', 'One-Arm Dumbbell Row', 'back', ['biceps'], 'dumbbell', 'horizontal-pull', [8, 12], 2, 120, true,
+    'Long arm stretch at the bottom, drive the elbow to your hip, not your armpit.')),
   ex('seated-cable-row', 'Seated Cable Row', 'back', ['biceps'], 'cable', 'horizontal-pull', [8, 12], 2.5, 120, true,
     'Chest tall, pull to the sternum, let the weight stretch you forward under control.'),
   ex('chest-supported-row', 'Chest-Supported Row', 'back', ['biceps'], 'machine', 'horizontal-pull', [8, 12], 2.5, 120, true,
@@ -90,8 +97,8 @@ export const BUILTIN_EXERCISES: Exercise[] = [
     'Lower the bar behind the crown of your head — keep the upper arms still.'),
   ex('overhead-cable-ext', 'Overhead Cable Extension', 'triceps', [], 'cable', 'triceps-overhead', [10, 15], 2.5, 90, false,
     'Face away, elbows by your ears — the deep stretch is where the growth is.'),
-  ex('db-overhead-ext', 'Dumbbell Overhead Extension', 'triceps', [], 'dumbbell', 'triceps-overhead', [10, 15], 2, 90, false,
-    'Both hands under one bell, lower behind the head, keep elbows pointing up.'),
+  single(ex('db-overhead-ext', 'Dumbbell Overhead Extension', 'triceps', [], 'dumbbell', 'triceps-overhead', [10, 15], 2, 90, false,
+    'Both hands under one bell, lower behind the head, keep elbows pointing up.')),
 
   // ── Biceps ────────────────────────────────────────────
   ex('barbell-curl', 'Barbell Curl', 'biceps', [], 'barbell', 'biceps-curl', [8, 12], 2.5, 90, false,
@@ -188,6 +195,46 @@ export function isBodyweightLoaded(exercise: Exercise): boolean {
   return exercise.equipment === 'bodyweight' && exercise.conditioning !== true
 }
 
+/**
+ * What a weight on this lift refers to, or null when there's nothing to
+ * clarify: a bar, cable or machine weight is simply the weight, and
+ * conditioning is logged as work done rather than at a load.
+ *
+ * Dumbbell and kettlebell lifts default to `per-hand` — the convention the
+ * catalog's increments, suggestions and history all already assume — and the
+ * handful of single-bell lifts say so explicitly (see `single`).
+ */
+export function loadBasisOf(exercise: Exercise): LoadBasis | null {
+  if (exercise.conditioning === true) return null
+  if (exercise.equipment !== 'dumbbell' && exercise.equipment !== 'kettlebell') return null
+  return exercise.loadBasis ?? 'per-hand'
+}
+
+/** 'dumbbell' / 'kettlebell' — what to call the thing in your hand. */
+function bellNoun(exercise: Exercise): string {
+  return exercise.equipment === 'kettlebell' ? 'kettlebell' : 'dumbbell'
+}
+
+/**
+ * Short tag to hang off a weight — "per hand", "one dumbbell" — for the many
+ * places a load is shown in passing and a full sentence would drown the row.
+ */
+export function loadBasisTag(exercise: Exercise): string | null {
+  const basis = loadBasisOf(exercise)
+  if (basis === null) return null
+  return basis === 'per-hand' ? 'per hand' : `one ${bellNoun(exercise)}`
+}
+
+/** One-line explanation, for where a weight is actually typed in. */
+export function loadBasisHint(exercise: Exercise): string | null {
+  const basis = loadBasisOf(exercise)
+  if (basis === null) return null
+  const noun = bellNoun(exercise)
+  return basis === 'per-hand'
+    ? `Per hand — log one ${noun}, not the pair`
+    : `Single ${noun} — log the weight of the one in play`
+}
+
 export function getExercise(id: string): Exercise {
   const found = exerciseById.get(id)
   if (!found) throw new Error(`Unknown exercise: ${id}`)
@@ -205,6 +252,7 @@ export function makeCustomExercise(input: {
   increment?: number
   restSec?: number
   isCompound?: boolean
+  loadBasis?: LoadBasis
   cue?: string
 }): Exercise {
   return {
@@ -219,6 +267,11 @@ export function makeCustomExercise(input: {
     restSec: input.restSec ?? (input.isCompound ? 150 : 90),
     isCompound: input.isCompound ?? false,
     barLoaded: input.equipment === 'barbell',
+    // Only stored where it means something, and only when it differs from the
+    // per-hand default, so the field stays absent on the vast majority of lifts.
+    ...(input.loadBasis === 'single' && (input.equipment === 'dumbbell' || input.equipment === 'kettlebell')
+      ? { loadBasis: 'single' as const }
+      : {}),
     cue: input.cue?.trim() ?? '',
   }
 }

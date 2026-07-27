@@ -77,6 +77,16 @@ tells you exactly what to lift next.
   timer holds a screen wake lock so the phone won't sleep mid-set, and (opt-in
   in Setup) fires a notification when rest is up even if the app is backgrounded
   or the screen is off.
+- **Dumbbells say which weight they mean** — "24 kg" on a dumbbell lift is
+  ambiguous until you know whether that's one bell or the pair, and a history
+  where the answer quietly drifted is worth less than no history. Forge names
+  the convention wherever a dumbbell weight is shown or typed — *per hand* for
+  anything you hold one in each hand, *one dumbbell* for one-arm work and
+  two-hands-under-one-bell lifts. It rides on the target, the warm-up ramp, the
+  weight stepper, both log sheets, the PR table and the e1RM chart, and custom
+  hand-held lifts declare their own (Setup → Exercises). Nothing is doubled
+  behind your back: tonnage and e1RM use the number you logged, so old sessions
+  stay comparable with new ones.
 - **Stall detection** — three sessions without progress on a lift triggers a
   deload-and-rebuild suggestion (or swap to a sibling variation). Progress is
   judged on *effective* load, so holding your pull-up reps through a bodyweight

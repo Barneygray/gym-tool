@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { BodyLog, Session, SetLog, Settings } from '../types'
 import { FREESTYLE } from '../types'
-import { exerciseById, getExercise, isBodyweightLoaded } from '../data/exercises'
+import {
+  exerciseById, getExercise, isBodyweightLoaded, loadBasisHint, loadBasisTag,
+} from '../data/exercises'
 import { dayById } from '../data/days'
 import { swapOptions } from '../engine/rotation'
 import { suggestFor } from '../engine/progression'
@@ -98,6 +100,12 @@ function ActiveSession({ active, setActive, history, settings, bodyLog, onFinish
     [exercise, history, settings, phase, bwAt, readiness],
   )
   const loggedSets = active.logged[exercise.id] ?? []
+
+  // Every weight on this screen — target, warm-up ramp, what you type in — is
+  // one bell's worth on dumbbell work, which is worth saying rather than
+  // leaving to be guessed at from the size of the number.
+  const basisTag = loadBasisTag(exercise)
+  const basisHint = loadBasisHint(exercise)
 
   // Superset: the group this exercise belongs to, and the partner to alternate
   // to next (the group member with the fewest logged sets so far).
@@ -363,8 +371,10 @@ function ActiveSession({ active, setActive, history, settings, bodyLog, onFinish
         <div className="kind">{KIND_LABEL[suggestion.kind]}</div>
         <div className="target num">
           {suggestion.kind === 'start'
-            ? <>{suggestion.sets} × {suggestion.targetReps} <small>find your weight</small></>
-            : <>{formatNum(suggestion.weight)} kg × {suggestion.targetReps} <small>× {suggestion.sets} sets</small></>}
+            ? <>{suggestion.sets} × {suggestion.targetReps}
+              <small>find your weight{basisTag && ` · ${basisTag}`}</small></>
+            : <>{formatNum(suggestion.weight)} kg × {suggestion.targetReps}
+              <small>× {suggestion.sets} sets{basisTag && ` · ${basisTag}`}</small></>}
         </div>
         <div className="why">{suggestion.reason}</div>
         {suggestion.offerSwap && untouched && (
@@ -379,7 +389,10 @@ function ActiveSession({ active, setActive, history, settings, bodyLog, onFinish
 
       {warmups.length > 0 && (
         <div className="card warmup-list">
-          <div className="section-label" style={{ margin: '0 0 var(--s1)' }}>Warm-up ramp</div>
+          <div className="section-label" style={{ margin: '0 0 var(--s1)' }}>
+            <span>Warm-up ramp</span>
+            {basisTag && <span>{basisTag}</span>}
+          </div>
           {warmups.map((w, i) => (
             <div className="w-row num" key={i}>
               <span>{w.label}</span>
@@ -394,6 +407,8 @@ function ActiveSession({ active, setActive, history, settings, bodyLog, onFinish
           bigStep={exercise.barLoaded ? 10 : 5} onChange={setWeight} />
         <Stepper label="Reps" value={reps} step={1} onChange={setReps} />
       </div>
+
+      {basisHint && <div className="plates-hint">{basisHint}</div>}
 
       {plates && plates.length > 0 && (
         <div className="plates-hint num">Per side: {plates.map(formatNum).join(' · ')}</div>
@@ -572,17 +587,21 @@ function SummaryView({ summary, dayType, history, onDone, onStretch }: {
         <div className="summary-stat"><div className="v num">{mins}′</div><div className="k">Minutes</div></div>
       </div>
 
-      {prs.map((pr) => (
-        <div className="pr-flash" key={`${pr.exerciseId}-${pr.kind}`}>
-          <span className="pr-medal" aria-hidden="true"><TrophyIcon size={26} /></span>
-          <div style={{ minWidth: 0 }}>
-            <div className="pr-kind">{pr.kind === 'weight' ? 'New weight PR' : 'New est. 1RM PR'}</div>
-            <div className="pr-line">
-              {getExercise(pr.exerciseId).name} — <span className="num">{formatNum(pr.weight)} kg × {pr.reps}</span>
+      {prs.map((pr) => {
+        const tag = loadBasisTag(getExercise(pr.exerciseId))
+        return (
+          <div className="pr-flash" key={`${pr.exerciseId}-${pr.kind}`}>
+            <span className="pr-medal" aria-hidden="true"><TrophyIcon size={26} /></span>
+            <div style={{ minWidth: 0 }}>
+              <div className="pr-kind">{pr.kind === 'weight' ? 'New weight PR' : 'New est. 1RM PR'}</div>
+              <div className="pr-line">
+                {getExercise(pr.exerciseId).name} — <span className="num">{formatNum(pr.weight)} kg × {pr.reps}</span>
+                {tag && <span> · {tag}</span>}
+              </div>
             </div>
           </div>
-        </div>
-      ))}
+        )
+      })}
       {prs.length === 0 && (
         <p className="sub" style={{ maxWidth: '38ch' }}>
           No PRs today — showing up is the PR. The engine has adjusted your next targets.
