@@ -47,8 +47,9 @@ export function TodayScreen({ history, settings, bodyLog, startWorkout, onChange
   const phase = useMemo(() => phaseFor(settings.meso, now), [settings.meso, now])
   const bwAt = useMemo(() => bodyweightAt(bodyLog), [bodyLog])
   // The week's layout: a hand-built plan when there is one — custom days
-  // included — otherwise the frequency-derived automatic one.
-  const slots = useMemo(() => resolveWeekPlan(settings, history), [settings, history])
+  // included — otherwise the frequency-derived automatic one, anchored to this
+  // week's Monday so logging a session doesn't relabel the days around it.
+  const slots = useMemo(() => resolveWeekPlan(settings, history, now), [settings, history, now])
   // The coach reads the same plan, so the card and the strip can't disagree.
   const rec = useMemo(
     () => recommendDay(history, now, { plan: slots, weekday: mondayIndex(now) }),
