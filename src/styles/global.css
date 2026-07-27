@@ -2710,6 +2710,194 @@ input[type='number'] {
   height: 34px;
 }
 
+/* ═══ Cool-down ═══════════════════════════════════════════
+   The sheet that catches you on the way out of a session, and
+   the guided block it starts. Two taps to choose, then a screen
+   that is almost entirely one number: the seconds left on the
+   hold you are currently in. */
+.cool-options {
+  margin-top: var(--s5);
+  border-top: 1px solid var(--line);
+}
+.cool-option {
+  width: 100%;
+  text-align: left;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+  padding: var(--s4) 0;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  color: inherit;
+  font: inherit;
+  transition: background var(--fast);
+}
+.cool-option:active:not(:disabled) {
+  background: linear-gradient(90deg, var(--surface-2), transparent);
+}
+.cool-option:disabled {
+  opacity: 0.4;
+}
+.cool-option .co-name {
+  font-size: 17px;
+  font-weight: 620;
+  font-stretch: 103%;
+  letter-spacing: -0.028em;
+  line-height: 1.2;
+}
+.cool-option .co-blurb {
+  color: var(--text-faint);
+  font-size: 12.5px;
+  margin-top: 2px;
+}
+.cool-option .co-len {
+  font-size: 13px;
+  font-weight: 680;
+  font-stretch: var(--w-wide);
+  font-variant-numeric: tabular-nums;
+  color: var(--ember);
+  flex-shrink: 0;
+}
+.cool-option .chev {
+  color: var(--text-faint);
+  display: flex;
+  opacity: 0.6;
+  flex-shrink: 0;
+}
+
+.cool-stage {
+  text-align: center;
+  padding: var(--s5) 0 var(--s4);
+}
+.cool-phase {
+  font-size: 9.5px;
+  font-weight: 650;
+  font-stretch: var(--w-cond);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.cool-stage.work .cool-phase {
+  color: var(--ember);
+}
+.cool-ring {
+  position: relative;
+  width: 132px;
+  height: 132px;
+  margin: var(--s4) auto var(--s5);
+}
+.cool-count {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 44px;
+  font-weight: 700;
+  font-stretch: var(--w-wide);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.05em;
+}
+.cool-name {
+  font-size: 22px;
+  font-weight: 680;
+  font-stretch: 104%;
+  letter-spacing: -0.04em;
+  line-height: 1.1;
+  text-wrap: balance;
+}
+.cool-meta {
+  margin-top: var(--s2);
+  font-size: 10.5px;
+  font-weight: 650;
+  font-stretch: var(--w-cond);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+.cool-trim {
+  color: var(--text-faint);
+}
+.cool-cue {
+  margin: var(--s3) auto 0;
+  max-width: 34ch;
+  color: var(--text-dim);
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+.cool-controls {
+  display: grid;
+  grid-template-columns: 1fr 1.4fr;
+  gap: var(--s3);
+  align-items: stretch;
+}
+.cool-controls .btn-ghost {
+  margin: 0;
+}
+
+/* The block's running order, ticked off as it goes. Same ledger
+   rows as the Stretch tab, minus the checkbox affordance —
+   nothing here is tapped, the clock does the ticking. */
+.cool-row {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  column-gap: var(--s3);
+  padding: var(--s3) 0;
+  border-bottom: 1px solid var(--line);
+}
+.cool-row:last-child {
+  border-bottom: none;
+}
+.cool-row .check {
+  grid-row: 1 / -1;
+}
+.cool-row.done .check {
+  background: var(--green);
+  border-color: var(--green);
+  color: var(--ember-ink);
+}
+.cool-row.at .check {
+  border-color: var(--ember);
+}
+.cool-row .top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--s3);
+}
+.cool-row .name {
+  font-weight: 600;
+  font-size: 15px;
+  font-stretch: 101%;
+  letter-spacing: -0.024em;
+}
+.cool-row.at .name {
+  color: var(--ember);
+}
+.cool-row.done .name {
+  color: var(--text-dim);
+}
+.cool-row .hold {
+  color: var(--text-faint);
+  font-size: 10.5px;
+  font-weight: 650;
+  font-stretch: var(--w-cond);
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.cool-row .targets {
+  color: var(--text-faint);
+  font-size: 11.5px;
+  margin-top: 2px;
+}
+
 /* ═══ Utilities ═══════════════════════════════════════════ */
 .mt-3 {
   margin-top: var(--s3);

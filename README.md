@@ -122,6 +122,17 @@ tells you exactly what to lift next.
   crucially, to get *accurate* numbers for bodyweight lifts: pull-ups, dips, and
   other bodyweight-loaded moves fold bodyweight-at-the-time into their e1RM, PRs,
   and tonnage instead of counting only the added plate.
+- **A cool-down that runs itself** — finishing a session asks one question while
+  you're still standing there: warm down, posture correction, core work, or skip.
+  Pick one and it offers five or ten minutes, then builds a block that actually
+  fills it — holds for the muscles you just trained, the desk-rescue sequences,
+  or bodyweight core work, drawn from the app's own catalogs and ordered by
+  whatever you've neglected longest. It then *runs* the block: one movement on
+  screen at a time with the clock counting the hold, a chime between them, pause
+  and skip where you need them. What you finish is logged the way the Stretch and
+  Condition tabs log it, so it feeds staleness, muscle freshness and weekly hard
+  sets — and a block cut short to fit the time logs the sets it really ran, not
+  the ones the scheme wanted.
 - **Stretch tab** — key holds per muscle group, plus a *Desk Rescue* section for
   lower back, tech neck, and hips. Holds are loggable and each group shows when
   you last did it, so neglect is visible; the coach names groups gone stale for

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { Suspense, lazy, useEffect, useMemo, useState } from 'react'
 import type { BodyLog, Session, SetLog, Settings } from '../types'
 import { FREESTYLE } from '../types'
 import {
@@ -22,6 +22,8 @@ import { useWakeLock } from '../hooks/useWakeLock'
 import { Stepper, formatNum } from '../components/Stepper'
 import { RestTimer } from '../components/RestTimer'
 import { ExercisePicker } from '../components/ExercisePicker'
+import { CooldownSheet } from '../components/CooldownSheet'
+import type { CooldownPlan } from '../engine/cooldown'
 import { nextPartner } from '../engine/superset'
 import { BackIcon, CaretIcon, CloseIcon, LinkIcon, SwapIcon, TrashIcon, TrophyIcon } from '../components/Icons'
 import type { ActiveWorkout } from '../App'
@@ -29,6 +31,10 @@ import type { ActiveWorkout } from '../App'
 const KIND_LABEL = {
   increase: 'Level up', build: 'Beat last time', start: 'First time', deload: 'Deload & rebuild',
 } as const
+
+// The guided cool-down runs after the session is already saved, so it has no
+// business being in the chunk that has to paint at the start of one.
+const CooldownScreen = lazy(() => import('./Cooldown').then((m) => ({ default: m.CooldownScreen })))
 
 interface WorkoutProps {
   active: ActiveWorkout
@@ -81,6 +87,8 @@ function EmptyWorkout({ active, setActive }: WorkoutProps) {
 
 function ActiveSession({ active, setActive, history, settings, bodyLog, onFinished, onStretch }: WorkoutProps) {
   const [summary, setSummary] = useState<{ session: Session; prs: ReturnType<typeof newPRsInSession> } | null>(null)
+  /** The cool-down block chosen on the summary, once it's running. */
+  const [cooldown, setCooldown] = useState<CooldownPlan | null>(null)
   // The rest belongs to the session, not to whichever station is on screen: it
   // keeps running while you walk to the next lift, read your history, or add a
   // station. Skipping it, logging the next set or going back to fix one, and
@@ -282,6 +290,19 @@ function ActiveSession({ active, setActive, history, settings, bodyLog, onFinish
     setSummary({ session, prs })
   }
 
+  if (cooldown) {
+    return (
+      <Suspense fallback={<div className="screen-loading">Loading…</div>}>
+        <CooldownScreen
+          plan={cooldown}
+          soundOn={settings.soundOn}
+          onLogged={onFinished}
+          onDone={() => setActive(null)}
+        />
+      </Suspense>
+    )
+  }
+
   if (summary) {
     return (
       <SummaryView
@@ -290,6 +311,7 @@ function ActiveSession({ active, setActive, history, settings, bodyLog, onFinish
         history={history}
         onDone={() => setActive(null)}
         onStretch={onStretch}
+        onCooldown={setCooldown}
       />
     )
   }
@@ -556,14 +578,19 @@ function relativeDay(ts: number): string {
   return new Date(ts).toLocaleDateString('en', { day: 'numeric', month: 'short' })
 }
 
-function SummaryView({ summary, dayType, history, onDone, onStretch }: {
+function SummaryView({ summary, dayType, history, onDone, onStretch, onCooldown }: {
   summary: { session: Session; prs: ReturnType<typeof newPRsInSession> }
   dayType: string
   history: Session[]
   onDone: () => void
   onStretch: (groupIds: string[]) => void
+  onCooldown: (plan: CooldownPlan) => void
 }) {
   const { session, prs } = summary
+  // The cool-down asks itself, straight away. Left to a button on a summary
+  // screen it is never tapped: by the time you've read your tonnage you're
+  // already walking to the door.
+  const [picking, setPicking] = useState(true)
 
   // Warm, finished, phone already in hand — the one moment stretching actually
   // happens. Offer the groups covering what was just trained, stalest first.
@@ -611,8 +638,14 @@ function SummaryView({ summary, dayType, history, onDone, onStretch }: {
         </p>
       )}
 
+      {!picking && (
+        <button className="btn-ghost mt-4" onClick={() => setPicking(true)}>
+          Cool down — 5 or 10 minutes
+        </button>
+      )}
+
       {stretchGroups.length > 0 && (
-        <button className="btn-ghost stretch-offer mt-4"
+        <button className="btn-ghost stretch-offer mt-3"
           onClick={() => onStretch(stretchGroups)}>
           Stretch it out — {groupNames(stretchGroups).join(' · ')}
         </button>
@@ -620,6 +653,18 @@ function SummaryView({ summary, dayType, history, onDone, onStretch }: {
 
       <div style={{ height: 'var(--s5)' }} />
       <button className="btn-primary" onClick={onDone}>Done</button>
+
+      {picking && (
+        <CooldownSheet
+          muscles={muscles}
+          history={history}
+          onSkip={() => setPicking(false)}
+          onStart={(plan) => {
+            setPicking(false)
+            onCooldown(plan)
+          }}
+        />
+      )}
     </>
   )
 }
