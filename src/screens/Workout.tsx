@@ -81,7 +81,11 @@ function EmptyWorkout({ active, setActive }: WorkoutProps) {
 
 function ActiveSession({ active, setActive, history, settings, bodyLog, onFinished, onStretch }: WorkoutProps) {
   const [summary, setSummary] = useState<{ session: Session; prs: ReturnType<typeof newPRsInSession> } | null>(null)
-  const [rest, setRest] = useState<{ startedAt: number; durationSec: number } | null>(null)
+  // The rest belongs to the session, not to whichever station is on screen: it
+  // keeps running while you walk to the next lift, read your history, or add a
+  // station. Skipping it, logging the next set or going back to fix one, and
+  // finishing the session all stop it.
+  const [rest, setRest] = useState<{ startedAt: number; durationSec: number; exerciseId: string } | null>(null)
   /** 'add' appends a station; 'swap' replaces the current one. */
   const [picking, setPicking] = useState<'add' | 'swap' | null>(null)
 
@@ -178,7 +182,7 @@ function ActiveSession({ active, setActive, history, settings, bodyLog, onFinish
     setRpe(undefined)
     setNote('')
     setShowNote(false)
-    setRest({ startedAt: Date.now(), durationSec: exercise.restSec })
+    setRest({ startedAt: Date.now(), durationSec: exercise.restSec, exerciseId: exercise.id })
   }
 
   const editSet = (i: number) => {
@@ -201,16 +205,12 @@ function ActiveSession({ active, setActive, history, settings, bodyLog, onFinish
     const next = index + delta
     if (next >= 0 && next < active.exerciseIds.length) {
       setActive({ ...active, currentIndex: next })
-      setRest(null)
     }
   }
 
   const goToId = (id: string) => {
     const idx = active.exerciseIds.indexOf(id)
-    if (idx >= 0) {
-      setActive({ ...active, currentIndex: idx })
-      setRest(null)
-    }
+    if (idx >= 0) setActive({ ...active, currentIndex: idx })
   }
 
   // ── Reshaping the session mid-workout ─────────────────
@@ -229,7 +229,6 @@ function ActiveSession({ active, setActive, history, settings, bodyLog, onFinish
     const ids = [...active.exerciseIds]
     ids.splice(index + 1, 0, id)
     setActive({ ...active, exerciseIds: ids, currentIndex: index + 1 })
-    setRest(null)
   }
 
   const swapExercise = (id: string) => {
@@ -244,7 +243,6 @@ function ActiveSession({ active, setActive, history, settings, bodyLog, onFinish
       // A swapped-out lift can't stay in a superset pairing that no longer exists.
       supersets: active.supersets?.map((g) => g.filter((gid) => gid !== exercise.id)).filter((g) => g.length > 1),
     })
-    setRest(null)
   }
 
   const dropExercise = () => {
@@ -257,7 +255,6 @@ function ActiveSession({ active, setActive, history, settings, bodyLog, onFinish
       currentIndex: Math.max(0, Math.min(index, ids.length - 1)),
       supersets: active.supersets?.map((g) => g.filter((gid) => gid !== exercise.id)).filter((g) => g.length > 1),
     })
-    setRest(null)
   }
 
   const finish = async () => {
@@ -501,7 +498,13 @@ function ActiveSession({ active, setActive, history, settings, bodyLog, onFinish
           durationSec={rest.durationSec}
           soundOn={settings.soundOn}
           onDismiss={() => setRest(null)}
-          partner={partnerId ? { label: getExercise(partnerId).name, onGo: () => goToId(partnerId) } : undefined}
+          // The superset jump is a "go now" button, so it ends the rest — but
+          // it's only on offer while you're still standing at the station the
+          // rest came from. Walk anywhere else and the clock just names it.
+          partner={rest.exerciseId === exercise.id && partnerId
+            ? { label: getExercise(partnerId).name, onGo: () => { setRest(null); goToId(partnerId) } }
+            : undefined}
+          fromLabel={rest.exerciseId === exercise.id ? undefined : getExercise(rest.exerciseId).name}
         />
       )}
     </>

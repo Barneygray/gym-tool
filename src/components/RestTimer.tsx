@@ -9,9 +9,11 @@ interface RestTimerProps {
   onDismiss: () => void
   /** When set, a superset partner to jump straight to instead of waiting. */
   partner?: { label: string; onGo: () => void }
+  /** Name of the station the rest came from, once you've moved on from it. */
+  fromLabel?: string
 }
 
-export function RestTimer({ startedAt, durationSec, soundOn, onDismiss, partner }: RestTimerProps) {
+export function RestTimer({ startedAt, durationSec, soundOn, onDismiss, partner, fromLabel }: RestTimerProps) {
   const [now, setNow] = useState(Date.now())
   const beeped = useRef(false)
 
@@ -76,9 +78,9 @@ export function RestTimer({ startedAt, durationSec, soundOn, onDismiss, partner 
           style={{ transition: 'stroke-dashoffset 0.25s linear' }}
         />
       </svg>
-      <div>
+      <div className="rt-body">
         <div className="time num">{done ? 'GO' : `${mm}:${String(ss).padStart(2, '0')}`}</div>
-        <div className="sub">{partner ? `Superset — then ${partner.label}` : done ? 'Rested — next set' : 'Resting'}</div>
+        <div className="sub">{subLabel(done, partner?.label, fromLabel)}</div>
       </div>
       <div className="actions">
         {partner && (
@@ -88,6 +90,17 @@ export function RestTimer({ startedAt, durationSec, soundOn, onDismiss, partner 
       </div>
     </div>
   )
+}
+
+/**
+ * The line under the clock. It answers whichever question is live: what to do
+ * next in a superset, what the clock belongs to once you've walked to another
+ * station, and otherwise just where the rest is up to.
+ */
+function subLabel(done: boolean, partnerLabel?: string, fromLabel?: string): string {
+  if (partnerLabel) return `Superset — then ${partnerLabel}`
+  if (fromLabel) return `${done ? 'Rested' : 'Resting'} — ${fromLabel}`
+  return done ? 'Rested — next set' : 'Resting'
 }
 
 function beep() {

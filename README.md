@@ -74,9 +74,11 @@ tells you exactly what to lift next.
   button, not just advice.
 - **Smart in-workout tools** — warm-up ramps for compounds, per-side plate math,
   auto-starting rest timer with chime/vibration, per-set RPE and notes. The
-  timer holds a screen wake lock so the phone won't sleep mid-set, and (opt-in
-  in Setup) fires a notification when rest is up even if the app is backgrounded
-  or the screen is off.
+  rest belongs to the session rather than one station, so it keeps counting
+  while you walk to the next lift or add an exercise — naming where it came
+  from once you've moved on. The timer holds a screen wake lock so the phone
+  won't sleep mid-set, and (opt-in in Setup) fires a notification when rest is
+  up even if the app is backgrounded or the screen is off.
 - **Dumbbells say which weight they mean** — "24 kg" on a dumbbell lift is
   ambiguous until you know whether that's one bell or the pair, and a history
   where the answer quietly drifted is worth less than no history. Forge names
