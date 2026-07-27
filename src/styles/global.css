@@ -313,21 +313,27 @@ input[type='number'] {
 }
 
 /* ═══ Shell ═══════════════════════════════════════════════ */
+/* `height: 100%` resolves against the *large* viewport on iOS — the
+   one you get with the browser toolbars retracted — so it overshot
+   the area actually on screen. `dvh` tracks the visible viewport
+   instead; `vh` is the fallback for anything that lacks it. */
 .app {
-  height: 100%;
+  height: 100vh;
+  height: 100dvh;
   display: flex;
   flex-direction: column;
   max-width: 480px;
   margin: 0 auto;
   position: relative;
+  overflow: hidden;
 }
 
 .app-main {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
-  padding: calc(var(--s6) + env(safe-area-inset-top)) var(--gut)
-    calc(var(--tabbar-h) + var(--s7) + env(safe-area-inset-bottom));
+  padding: calc(var(--s6) + env(safe-area-inset-top)) var(--gut) var(--s7);
 }
 .app-main.full {
   padding-bottom: calc(var(--s6) + env(safe-area-inset-bottom));
@@ -339,26 +345,22 @@ input[type='number'] {
 /* ── Tab bar ──────────────────────────────────────────────
    Icon-led, labels in condensed caps at 9px. Six destinations
    fit 390px comfortably at that width — the labels used to
-   collide because they were set at normal width. */
+   collide because they were set at normal width.
+
+   It docks as the last flex child of the shell rather than
+   `position: fixed`: fixed anchors to the layout viewport, which
+   on iOS is not the box you can actually see, and the bar floated
+   ~60px clear of the bottom of the screen. As a flex child it
+   sits on the bottom edge of `.app`, which *is* the visible
+   viewport. Nothing scrolls under it any more, so the frosted
+   background it used to need is now just an opaque plate. */
 .tabbar {
-  position: fixed;
-  bottom: 0;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 100%;
-  max-width: 480px;
+  flex-shrink: 0;
   display: flex;
-  background: color-mix(in srgb, var(--bg) 93%, transparent);
-  backdrop-filter: blur(28px) saturate(1.3);
-  -webkit-backdrop-filter: blur(28px) saturate(1.3);
+  background: var(--bg);
   border-top: 1px solid var(--line);
   padding-bottom: env(safe-area-inset-bottom);
   z-index: 40;
-}
-@supports not (background: color-mix(in srgb, red 50%, transparent)) {
-  .tabbar {
-    background: rgba(10, 9, 8, 0.94);
-  }
 }
 .tabbar button {
   position: relative;
