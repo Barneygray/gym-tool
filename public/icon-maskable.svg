@@ -13,9 +13,8 @@
       <stop offset="0" stop-color="#fffdfb"/><stop offset="1" stop-color="#cec7c1"/>
     </linearGradient>
   </defs>
-  <rect width="64" height="64" rx="14" fill="url(#tile)"/>
-  <rect x=".5" y=".5" width="63" height="63" rx="13.5" fill="none" stroke="rgba(255, 246, 240, 0.10)"/>
-  <g>
+  <rect width="64" height="64" rx="0" fill="url(#tile)"/>
+  <g transform="translate(32 32) scale(0.74) translate(-32 -32)">
   <rect x="4" y="29.5" width="56" height="5" rx="2.5" fill="url(#bar)"/>
   <rect x="9.5" y="23" width="5.5" height="18" rx="2.75" fill="url(#small)"/>
   <rect x="49" y="23" width="5.5" height="18" rx="2.75" fill="url(#small)"/>
