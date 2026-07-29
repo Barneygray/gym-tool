@@ -101,12 +101,22 @@
   -webkit-tap-highlight-color: transparent;
 }
 
+/* The document itself must not scroll. The shell is sized to the viewport you
+   can *see*, while `height: 100%` resolves against the *large* viewport — the
+   one you'd have with the browser's bars retracted — and the difference
+   between the two was a scrollable strip. Dragging it slid the entire shell,
+   tab bar included, up off the bottom edge and left a black band underneath;
+   let go at the wrong moment and it stayed there. Pinning the body to the
+   viewport removes the strip, so there is nothing left to slide. */
 html,
 body {
   height: 100%;
+  overflow: hidden;
 }
 
 body {
+  position: fixed;
+  inset: 0;
   background: var(--bg);
   color: var(--text);
   font-family: var(--font);
@@ -316,7 +326,16 @@ input[type='number'] {
 /* `height: 100%` resolves against the *large* viewport on iOS — the
    one you get with the browser toolbars retracted — so it overshot
    the area actually on screen. `dvh` tracks the visible viewport
-   instead; `vh` is the fallback for anything that lacks it. */
+   instead; `vh` is the fallback for anything that lacks it.
+
+   `--app-h` is the same number measured rather than derived —
+   `visualViewport.height`, set by `useShellHeight`. iOS updates
+   `dvh` lazily: it lags a toolbar collapsing, a rotation, and a
+   home-screen app being resumed, and while it lags the shell is
+   the height of the viewport we *had*. That lag is how the tab bar
+   keeps creeping up off the bottom edge. The measurement doesn't
+   lag, so it wins where it exists; `dvh` stays as the fallback for
+   the first paint and for anything without visualViewport. */
 .app {
   height: 100vh;
   height: 100dvh;
@@ -326,6 +345,13 @@ input[type='number'] {
   margin: 0 auto;
   position: relative;
   overflow: hidden;
+}
+/* Guarded: the `var()` fallback has to be a length this browser understands,
+   or the whole declaration drops out and the shell falls back to `auto`. */
+@supports (height: 100dvh) {
+  .app {
+    height: var(--app-h, 100dvh);
+  }
 }
 
 .app-main {
@@ -2833,6 +2859,35 @@ input[type='number'] {
   letter-spacing: 0.16em;
   text-transform: uppercase;
   padding: var(--s7) 0;
+}
+
+/* What a screen that threw shows instead of nothing at all. */
+.app-error {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+  padding: var(--s7) 0 var(--s7) var(--s4);
+  border-left: 2px solid var(--ember);
+}
+.app-error h2 {
+  font-size: 26px;
+  font-weight: 700;
+  font-stretch: var(--w-cond);
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+}
+/* The backstop boundary in `main.tsx` renders outside the shell, so it has to
+   bring its own gutter and top inset — there's no `.app-main` under it. */
+#root > .app-error {
+  max-width: 480px;
+  margin: 0 var(--gut);
+  padding: calc(var(--s8) + env(safe-area-inset-top)) 0 var(--s7) var(--s4);
+}
+.app-error .app-error-note {
+  color: var(--text-dim);
+  font-size: 14px;
+  margin-bottom: var(--s2);
+  max-width: 34ch;
 }
 
 /* ═══ Onboarding ══════════════════════════════════════════ */
