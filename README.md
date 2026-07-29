@@ -15,13 +15,13 @@ tells you exactly what to lift next.
   automatically between sessions for a varied growth stimulus, and any pick can
   be swapped for a like exercise, added, or dropped before you start.
 - **Custom exercises** — add the machines and variations your gym actually has
-  (Setup → Exercises). Custom lifts are first-class: they show up as swap and
+  (Setup → Program → Your exercises). Custom lifts are first-class: they show up as swap and
   add options and get the same progression engine, warm-ups, e1RM trend, and PR
   tracking as the built-ins.
 - **Exercises you never do** — a cranky lower back and deadlifts, a shoulder
   that hates overhead pressing, or plain dislike: some lifts are simply not on
   the menu. Swapping one away every session was the app's only answer, and the
-  rotation cheerfully offered it back next time. Setup → Never prescribe makes
+  rotation cheerfully offered it back next time. Setup → Program → Never prescribe makes
   that decision once — the lift drops out of the day rotation, the swap
   suggestions and the add lists, on every gym and every device. A slot whose
   whole pool you've excluded is refilled from the same muscle rather than
@@ -34,14 +34,14 @@ tells you exactly what to lift next.
   your last few sessions rather than one: an easy top-of-range run earns a double
   increment, a grind earns half of one, and untagged sessions get the plain
   conservative increment.
-- **Mesocycle periodization** — opt into a training block (Setup → Training block)
+- **Mesocycle periodization** — opt into a training block (Setup → Progression → Training block)
   and the engine stops living session-to-session: accumulation weeks ramp your
   prescribed set count while the final week auto-schedules a planned deload
   (reduced load, a set trimmed) so fatigue clears before the next block. The
   Train screen shows the current week and phase, and the block rolls into a fresh
   cycle automatically.
 - **Build your own split** — the five built-in days are a starting point, not a
-  cage. Setup → Program lets you create custom days (upper/lower, full-body, a
+  cage. Setup → Program → Your days lets you create custom days (upper/lower, full-body, a
   bro split — whatever you run); they appear on Train with the same rotation,
   progression engine, warm-ups, and stats as the built-ins.
 - **Weekly plan with rest days** — set how many sessions a week you train (Setup →
@@ -68,7 +68,7 @@ tells you exactly what to lift next.
   reading the history as it stood when you began — so an interrupted workout
   stays one workout rather than two short ones an hour apart, the second of them
   prescribing progression on top of the first.
-- **Readiness check** (opt in, Setup → Autoregulation) — the log can't see that
+- **Readiness check** (opt in, Setup → Progression → Autoregulation) — the log can't see that
   you slept four hours. Rate how you feel before a session and the day's
   prescription bends to match: a rough day trims a set and backs the load off
   10%, a good one earns an extra set. It multiplies with the mesocycle phase, and
@@ -77,7 +77,7 @@ tells you exactly what to lift next.
   → Goals) and Forge fits your e1RM trend to project *when* you'll hit it, flags
   whether you're on pace against an optional deadline, and celebrates the goal
   when the number lands.
-- **Time-to-train reminders** — opt into a daily nudge (Setup → Reminders) and,
+- **Time-to-train reminders** — opt into a daily nudge (Setup → Alerts → Daily reminder) and,
   if you haven't trained by your chosen hour, Forge notifies you with the exact
   day the coach would pick next.
 - **A profile per gym** — bar weight and plates aren't a preference, they describe
@@ -95,7 +95,7 @@ tells you exactly what to lift next.
   rest belongs to the session rather than one station, so it keeps counting
   while you walk to the next lift or add an exercise — naming where it came
   from once you've moved on. The timer holds a screen wake lock so the phone
-  won't sleep mid-set, and (opt-in in Setup) fires a notification when rest is
+  won't sleep mid-set, and (opt-in in Setup → Alerts) fires a notification when rest is
   up even if the app is backgrounded or the screen is off.
 - **Brick breaker in the rest timer** — rest is dead time you're not allowed to
   skip, so the timer offers a game instead of a scroll: five levels of brick
@@ -109,7 +109,7 @@ tells you exactly what to lift next.
   anything you hold one in each hand, *one dumbbell* for one-arm work and
   two-hands-under-one-bell lifts. It rides on the target, the warm-up ramp, the
   weight stepper, both log sheets, the PR table and the e1RM chart, and custom
-  hand-held lifts declare their own (Setup → Exercises). Nothing is doubled
+  hand-held lifts declare their own (Setup → Program → Your exercises). Nothing is doubled
   behind your back: tonnage and e1RM use the number you logged, so old sessions
   stay comparable with new ones.
 - **Stall detection** — three sessions without progress on a lift triggers a
@@ -185,6 +185,27 @@ tells you exactly what to lift next.
   time, so edits and deletions propagate too, and any backup failure is surfaced
   in Settings instead of failing silently. See "Cloud backup" below.
 
+## Setup, organised
+
+Setup is an index, not a page. It used to be eleven ruled sections down one
+scroll, which meant "Wipe everything" sat a thumb-width from "Rest timer sound"
+and the thing you came for was never twice in the same place. Each concern now
+gets a page of its own, and the index states what each one is currently set to —
+so most visits end without opening anything.
+
+| Page | What's on it |
+| --- | --- |
+| **Weekly plan** | Sessions per week, and the seven-day editor for a custom week |
+| **Progression** | The training block (mesocycle) and the readiness check |
+| **Program** | Your custom days, your custom exercises, and the never-prescribe list |
+| **Equipment** | Bar, plates, and a named profile per gym |
+| **Alerts** | Rest-timer chime, background rest alerts, the daily time-to-train nudge |
+| **Backup & data** | What's on this device, cloud sync and its key, export/restore, and the wipe |
+
+Backup earns its own page because everything on it is about the copy of your
+training that outlives this phone — and because the last row on it deletes the
+lot, which is not a thing to leave sitting between two toggles.
+
 ## Stack
 
 Vite + React + TypeScript, Dexie (IndexedDB), hand-rolled SVG charts,
@@ -230,7 +251,7 @@ first run and syncs to a bucket named `forge-<sha256(key)>` — a value that nev
 ships in the bundle and that the server never sees in plaintext. Reaching your
 data needs the key, not just the app's URL.
 
-To train across devices, open Setup → Cloud Backup on the device that has your
+To train across devices, open Setup → Backup & data on the device that has your
 history, reveal and copy the key, and enter it on the other device. Keep a copy
 somewhere safe: lose it and the device you're holding still has your data, but no
 *new* device can reach the backup.
@@ -238,6 +259,6 @@ somewhere safe: lose it and the device you're holding still has your data, but n
 **Installs that predate this** stay on the old shared bucket (`forge-owner`)
 rather than being silently re-keyed away from their own history. That bucket's
 name ships in the app's public code, so anyone who found the URL could read or
-overwrite it — Setup → Cloud Backup offers a one-tap switch to a private bucket,
+overwrite it — Setup → Backup & data offers a one-tap switch to a private bucket,
 which re-uploads your local data under the new key. You can switch back, with a
 warning about what you're giving up.

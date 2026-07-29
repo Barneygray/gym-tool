@@ -22,7 +22,7 @@ const LogScreen = lazy(() => import('./screens/Log').then((m) => ({ default: m.L
 const StretchScreen = lazy(() => import('./screens/Stretch').then((m) => ({ default: m.StretchScreen })))
 const ConditioningScreen = lazy(() => import('./screens/Conditioning').then((m) => ({ default: m.ConditioningScreen })))
 const ProgressScreen = lazy(() => import('./screens/Progress').then((m) => ({ default: m.ProgressScreen })))
-const SettingsScreen = lazy(() => import('./screens/Settings').then((m) => ({ default: m.SettingsScreen })))
+const SettingsScreen = lazy(() => import('./screens/settings').then((m) => ({ default: m.SettingsScreen })))
 
 export type Tab = 'today' | 'log' | 'stretch' | 'condition' | 'progress' | 'settings'
 
