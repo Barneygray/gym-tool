@@ -61,8 +61,7 @@ export function ConditioningScreen({ history, onLogged }: ConditioningProps) {
         ),
       })),
     }
-    await saveSession(session)
-    void pushSession(session)
+    void pushSession(await saveSession(session))
     setSelected(new Set())
     await onLogged()
   }

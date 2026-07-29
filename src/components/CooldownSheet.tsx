@@ -5,6 +5,7 @@ import {
   type CooldownPlan, type CooldownTrack,
 } from '../engine/cooldown'
 import { BackIcon, ChevronIcon } from './Icons'
+import { Overlay } from './Overlay'
 
 interface CooldownSheetProps {
   /** Muscles the finished session trained — what a warm down is built around. */
@@ -36,7 +37,7 @@ export function CooldownSheet({ muscles, history, onStart, onSkip }: CooldownShe
   }, [track, muscles, history])
 
   return (
-    <>
+    <Overlay>
       <div className="sheet-backdrop" onClick={onSkip} />
       <div className="sheet" role="dialog" aria-modal="true" aria-labelledby="cooldown-title">
         {track === null ? (
@@ -94,7 +95,7 @@ export function CooldownSheet({ muscles, history, onStart, onSkip }: CooldownShe
           </>
         )}
       </div>
-    </>
+    </Overlay>
   )
 }
 

@@ -4,6 +4,7 @@ import {
   launch, movePaddle, newGame, step, type BreakerState,
 } from '../engine/breaker'
 import { CloseIcon } from './Icons'
+import { Overlay } from './Overlay'
 
 interface BrickBreakerProps {
   /** Seconds left on the rest clock — the game never hides the reason you're here. */
@@ -117,7 +118,7 @@ export function BrickBreaker({ remainingSec, onClose }: BrickBreakerProps) {
   const overlay = overlayFor(hud)
 
   return (
-    <>
+    <Overlay>
       <div className="sheet-backdrop" onClick={onClose} />
       <div className="bb-modal" role="dialog" aria-modal="true" aria-label="Brick breaker">
         <div className="bb-head">
@@ -162,7 +163,7 @@ export function BrickBreaker({ remainingSec, onClose }: BrickBreakerProps) {
 
         <div className="bb-foot">Drag to move · rest keeps counting</div>
       </div>
-    </>
+    </Overlay>
   )
 }
 

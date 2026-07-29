@@ -181,6 +181,13 @@ export interface Settings extends SyncMeta {
   weekPlan?: WeekPlan | null
   /** Ask how you're feeling before each session and autoregulate on it. */
   readinessCheck?: boolean
+  /**
+   * Exercise ids you never want prescribed — the lifts you don't do, full stop.
+   * Kept out of the rotation, the swap suggestions and the add lists on every
+   * gym and every device. Distinct from a profile's `unavailable`, which is
+   * about what one room happens to have on the floor.
+   */
+  excluded?: string[]
 }
 
 /** Pre-session self-rating that autoregulates the day's prescription. */

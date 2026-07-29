@@ -410,6 +410,35 @@ input[type='number'] {
   transition: color var(--fast);
 }
 
+/* ── Overlay layer ────────────────────────────────────────
+   Home for everything that docks to the bottom of the screen:
+   sheets, their backdrop, the rest timer. They used to be
+   `position: fixed`, which measures from the layout viewport —
+   the same box that once left the tab bar floating 60px clear
+   of the bottom edge.
+
+   The tab bar was moved onto `.app` to fix that; these were
+   not, so the two ended up measuring from different bottom
+   edges, and on a phone they disagree by the height of whatever
+   browser bar is showing. That put the last control on a sheet
+   ("Delete session" sits 20px off the bottom edge) inside the
+   band the tab bar and the browser's own bar occupy, where the
+   tap lands on the wrong thing.
+
+   As a child of `.app`, `position: absolute` in here resolves
+   against the visible box, exactly like the tab bar. The layer
+   is transparent to pointer events so the app underneath stays
+   live while it's empty; its children take theirs back. */
+.app-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  pointer-events: none;
+}
+.app-overlay > * {
+  pointer-events: auto;
+}
+
 /* ═══ Surfaces ════════════════════════════════════════════ */
 .card {
   background: var(--surface);
@@ -773,6 +802,76 @@ input[type='number'] {
   }
 }
 
+/* ── Resume today's session ──────────────────────────────
+   Sits above the coach card, and has to stay quieter than it: this
+   is an offer to undo something, not the day's headline. Boxed
+   rather than ruled, so it reads as a card that will be gone
+   tomorrow instead of another permanent section of the screen. */
+.resume-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+  margin-bottom: var(--s5);
+  padding: var(--s3) var(--s3) var(--s3) var(--s4);
+  border: 1px solid var(--line-2);
+  border-left: 2px solid var(--ember);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+}
+.resume-kind {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 9.5px;
+  font-weight: 700;
+  font-stretch: var(--w-cond);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.resume-kind svg {
+  flex-shrink: 0;
+  opacity: 0.8;
+}
+.resume-day {
+  font-size: 17px;
+  font-weight: 620;
+  font-stretch: 103%;
+  letter-spacing: -0.028em;
+  line-height: 1.2;
+  margin-top: 3px;
+}
+.resume-meta {
+  color: var(--text-faint);
+  font-size: 12px;
+  line-height: 1.4;
+  margin-top: 2px;
+  max-width: 30ch;
+}
+.resume-card .btn-small {
+  flex-shrink: 0;
+}
+
+/* The same offer on the summary screen, where the mis-tap lands you.
+   A quiet line under Done — findable if you're looking for it,
+   invisible if the session really is over. */
+.undo-finish {
+  display: block;
+  width: 100%;
+  margin-top: var(--s4);
+  padding: var(--s2);
+  font-size: 12.5px;
+  color: var(--text-faint);
+  text-decoration: underline;
+  text-decoration-color: var(--line-2);
+  text-underline-offset: 3px;
+  transition: color var(--fast);
+}
+.undo-finish:active {
+  color: var(--ember);
+}
+
 .coach-conflict {
   display: flex;
   gap: var(--s2);
@@ -963,31 +1062,32 @@ input[type='number'] {
   order: 1;
 }
 
-/* ═══ Sheets ══════════════════════════════════════════════ */
+/* ═══ Sheets ══════════════════════════════════════════════
+   Both of these render into `.app-overlay`, so they're sized
+   and placed by it: `absolute` here is the shell's box, which
+   is already the 480px column, so neither needs a width, a
+   max-width or the old `left: 50%` / `translateX(-50%)`
+   centring. Stacking is DOM order inside the layer. */
 .sheet-backdrop {
-  position: fixed;
+  position: absolute;
   inset: 0;
   background: rgba(4, 3, 3, 0.66);
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
-  z-index: 50;
   animation: fadeIn var(--med);
 }
 .sheet {
-  position: fixed;
+  position: absolute;
   bottom: 0;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 100%;
-  max-width: 480px;
-  max-height: 90dvh;
+  left: 0;
+  right: 0;
+  max-height: 90%;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   background: var(--surface);
   border-radius: var(--r-lg) var(--r-lg) 0 0;
   border-top: 1px solid var(--line-2);
   padding: var(--s3) var(--gut) calc(var(--s5) + env(safe-area-inset-bottom));
-  z-index: 51;
   box-shadow: var(--shadow-lg);
   animation: slideUp 280ms var(--ease);
 }
@@ -1026,11 +1126,11 @@ input[type='number'] {
 }
 @keyframes slideUp {
   from {
-    transform: translate(-50%, 20px);
+    transform: translateY(20px);
     opacity: 0;
   }
   to {
-    transform: translate(-50%, 0);
+    transform: translateY(0);
     opacity: 1;
   }
 }
@@ -1241,6 +1341,11 @@ input[type='number'] {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* An excluded lift you searched for by name: still tappable, but visibly not
+   part of the list you're being offered. */
+.add-picker-row.blocked {
+  opacity: 0.5;
 }
 .add-picker-empty {
   color: var(--text-faint);
@@ -1692,13 +1797,15 @@ input[type='number'] {
 }
 
 /* ── Rest timer ─────────────────────────────────────────── */
+/* Docked in `.app-overlay` like the sheets are, so it rests on
+   the bottom edge you can see rather than the layout viewport's;
+   inset by the gutter off both sides of the shell rather than
+   centred on a width it has to work out for itself. */
 .rest-timer {
-  position: fixed;
+  position: absolute;
   bottom: calc(var(--s3) + env(safe-area-inset-bottom));
-  left: 50%;
-  transform: translateX(-50%);
-  width: calc(100% - var(--gut) * 2);
-  max-width: 444px;
+  left: var(--gut);
+  right: var(--gut);
   display: flex;
   align-items: center;
   gap: var(--s3);
@@ -1709,7 +1816,6 @@ input[type='number'] {
   border-radius: var(--r-md);
   padding: var(--s3);
   box-shadow: var(--shadow);
-  z-index: 45;
   animation: slideUpSmall 240ms var(--ease);
 }
 @supports not (background: color-mix(in srgb, red 50%, transparent)) {
@@ -1719,11 +1825,11 @@ input[type='number'] {
 }
 @keyframes slideUpSmall {
   from {
-    transform: translate(-50%, 14px);
+    transform: translateY(14px);
     opacity: 0;
   }
   to {
-    transform: translate(-50%, 0);
+    transform: translateY(0);
     opacity: 1;
   }
 }
@@ -1777,28 +1883,32 @@ input[type='number'] {
    A rest is dead time you're not allowed to skip, so it gets a
    game. It's a modal in the app's own palette, and it goes when
    the clock does. */
+/* Like the sheets, this renders into `.app-overlay` — so it measures from the
+   shell's box, and centres in the column with auto margins rather than the old
+   `left: 50%` translate. */
 .bb-modal {
-  position: fixed;
-  left: 50%;
+  position: absolute;
   top: 50%;
-  transform: translate(-50%, -50%);
+  left: 0;
+  right: 0;
+  margin: 0 auto;
+  transform: translateY(-50%);
   width: calc(100% - var(--gut) * 2);
   max-width: 400px;
   background: var(--surface);
   border: 1px solid var(--line-2);
   border-radius: var(--r-lg);
   padding: var(--s3);
-  z-index: 51;
   box-shadow: var(--shadow);
   animation: bbIn 200ms var(--ease);
 }
 @keyframes bbIn {
   from {
-    transform: translate(-50%, -46%) scale(0.97);
+    transform: translateY(-46%) scale(0.97);
     opacity: 0;
   }
   to {
-    transform: translate(-50%, -50%) scale(1);
+    transform: translateY(-50%) scale(1);
     opacity: 1;
   }
 }

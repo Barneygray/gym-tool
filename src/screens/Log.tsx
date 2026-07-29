@@ -6,6 +6,7 @@ import { DAYS, dayById } from '../data/days'
 import { deleteSession, saveSession, updateSession } from '../db/db'
 import { pushSession } from '../db/sync'
 import { ExercisePicker } from '../components/ExercisePicker'
+import { Overlay } from '../components/Overlay'
 import { BookIcon, CloseIcon, TrashIcon } from '../components/Icons'
 
 interface LogProps {
@@ -188,14 +189,13 @@ function AddSession({ onClose, onChanged }: {
       finishedAt: startedAt,
       entries: cleaned,
     }
-    await saveSession(session)
-    void pushSession(session)
+    void pushSession(await saveSession(session))
     await onChanged()
     onClose()
   }
 
   return (
-    <>
+    <Overlay>
       <div className="sheet-backdrop" onClick={onClose} />
       <div className="sheet">
         <div className="sheet-head">
@@ -283,7 +283,7 @@ function AddSession({ onClose, onChanged }: {
           Save session
         </button>
       </div>
-    </>
+    </Overlay>
   )
 }
 
@@ -335,7 +335,7 @@ function SessionDetail({ session, onClose, onChanged }: {
   }
 
   return (
-    <>
+    <Overlay>
       <div className="sheet-backdrop" onClick={onClose} />
       <div className="sheet">
         <div className="sheet-head">
@@ -396,7 +396,7 @@ function SessionDetail({ session, onClose, onChanged }: {
           Delete session
         </button>
       </div>
-    </>
+    </Overlay>
   )
 }
 

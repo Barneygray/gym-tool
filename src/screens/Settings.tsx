@@ -15,6 +15,7 @@ import { autoWeekPlan, clampFrequency, defaultSplit, dayLabel } from '../engine/
 import {
   PLATE_PRESETS, activeProfile, makeProfile, parsePlates, profilesOf,
 } from '../engine/equipment'
+import { excludedIds, toggleExcluded } from '../engine/exclusions'
 import {
   generateSyncKey, getSyncKey, pushRecord, pushSettings, setSyncKey, supabaseConfigured,
 } from '../db/sync'
@@ -189,8 +190,11 @@ export function SettingsScreen({ settings, onChanged, syncing, onSyncNow, syncEr
       <div className="section-label">Exercises</div>
       <CustomExercises onChanged={onChanged} />
 
+      <div className="section-label">Never prescribe</div>
+      <ExcludedExercises settings={settings} update={update} />
+
       <div className="section-label">Program</div>
-      <CustomDays onChanged={onChanged} />
+      <CustomDays settings={settings} onChanged={onChanged} />
 
       {supabaseConfigured && (
         <>
@@ -649,6 +653,66 @@ function ExerciseForm({ onSave, onCancel }: {
   )
 }
 
+// ── Excluded exercises ──────────────────────────────────
+/**
+ * Some lifts are simply not on the menu — a cranky lower back and deadlifts, a
+ * shoulder that hates overhead pressing, or plain dislike. Swapping one away
+ * every time it came up was the only answer the app had, and the rotation
+ * offered it straight back next session. Excluding is that decision made once:
+ * the lift leaves the rotation, the swap suggestions and the add lists, on
+ * every gym and (settings being synced) every device.
+ */
+function ExcludedExercises({ settings, update }: {
+  settings: Settings
+  update: (patch: Partial<Settings>) => Promise<void>
+}) {
+  const [picking, setPicking] = useState(false)
+  const excluded = settings.excluded ?? []
+
+  const add = async (id: string) => {
+    setPicking(false)
+    await update({ excluded: toggleExcluded(settings, id) })
+  }
+
+  const remove = (id: string) => update({ excluded: excluded.filter((x) => x !== id) })
+
+  return (
+    <div className="card pane">
+      {excluded.length === 0 && !picking && (
+        <p className="sub" style={{ marginBottom: 'var(--s3)' }}>
+          Lifts you never do. Exclude one and it stops being prescribed — out of the day rotation,
+          out of the swap suggestions, out of the add lists. Nothing already logged is touched, and
+          you can always search for it by name if you change your mind for a session.
+        </p>
+      )}
+      {excluded.map((id) => {
+        const ex = EXERCISES.find((e) => e.id === id)
+        return (
+          <div className="settings-row" key={id}>
+            <div>
+              <div className="k">{ex?.name ?? id}</div>
+              <div className="sub">
+                {ex ? `${MUSCLE_LABEL[ex.primary]} · ${EQUIPMENT_LABEL[ex.equipment]} · never prescribed` : 'No longer in the catalog'}
+              </div>
+            </div>
+            <button className="btn-small" onClick={() => remove(id)}>Allow</button>
+          </div>
+        )
+      })}
+
+      {picking ? (
+        <ExercisePicker existing={excluded} placeholder="Which lift do you never do?"
+          onPick={add} onCancel={() => setPicking(false)} />
+      ) : (
+        <button className="btn-small" style={{ marginTop: excluded.length > 0 ? 'var(--s3)' : 0 }}
+          onClick={() => setPicking(true)}>
+          + Exclude an exercise
+        </button>
+      )}
+    </div>
+  )
+}
+
 // ── Training block (mesocycle) ──────────────────────────
 const BLOCK_LENGTHS = [3, 4, 5, 6]
 
@@ -875,7 +939,7 @@ function PrivateSyncKey({ onSyncNow }: { onSyncNow: () => Promise<void> }) {
 }
 
 // ── Program builder (custom days) ───────────────────────
-function CustomDays({ onChanged }: { onChanged: () => Promise<void> }) {
+function CustomDays({ settings, onChanged }: { settings: Settings; onChanged: () => Promise<void> }) {
   const [list, setList] = useState<DayTemplate[]>([])
   const [adding, setAdding] = useState(false)
 
@@ -917,7 +981,7 @@ function CustomDays({ onChanged }: { onChanged: () => Promise<void> }) {
         </div>
       ))}
       {adding ? (
-        <DayForm onSave={add} onCancel={() => setAdding(false)} />
+        <DayForm settings={settings} onSave={add} onCancel={() => setAdding(false)} />
       ) : (
         <button className="btn-small" style={{ marginTop: list.length > 0 ? 'var(--s3)' : 0 }}
           onClick={() => setAdding(true)}>
@@ -928,7 +992,8 @@ function CustomDays({ onChanged }: { onChanged: () => Promise<void> }) {
   )
 }
 
-function DayForm({ onSave, onCancel }: {
+function DayForm({ settings, onSave, onCancel }: {
+  settings: Settings
   onSave: (d: DayTemplate) => Promise<void>
   onCancel: () => void
 }) {
@@ -966,7 +1031,8 @@ function DayForm({ onSave, onCancel }: {
         )
       })}
       {picking ? (
-        <ExercisePicker existing={picks} onPick={(id) => { setPicks((p) => [...p, id]); setPicking(false) }}
+        <ExercisePicker existing={picks} excluded={excludedIds(settings)}
+          onPick={(id) => { setPicks((p) => [...p, id]); setPicking(false) }}
           onCancel={() => setPicking(false)} />
       ) : (
         <button className="btn-ghost mt-3" onClick={() => setPicking(true)}>+ Add exercise</button>
