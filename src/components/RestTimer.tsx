@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { cancelRestAlert, notifyRestDone, scheduleRestAlert } from '../notify'
 import { beep } from './chime'
+import { Overlay } from './Overlay'
 
 interface RestTimerProps {
   /** Unix ms when the rest period started; changes retrigger the timer. */
@@ -66,30 +67,32 @@ export function RestTimer({ startedAt, durationSec, soundOn, onDismiss, partner,
   const ss = Math.floor(remaining % 60)
 
   return (
-    <div className={`rest-timer${done ? ' done' : ''}`}>
-      <svg className="ring" width="40" height="40" viewBox="0 0 40 40">
-        <circle cx="20" cy="20" r={R} stroke="var(--line-strong)" strokeWidth="3.5" fill="none" />
-        <circle
-          cx="20" cy="20" r={R}
-          stroke={done ? 'var(--green)' : 'var(--ember)'}
-          strokeWidth="3.5" fill="none" strokeLinecap="round"
-          strokeDasharray={C}
-          strokeDashoffset={C * (1 - frac)}
-          transform="rotate(-90 20 20)"
-          style={{ transition: 'stroke-dashoffset 0.25s linear' }}
-        />
-      </svg>
-      <div className="rt-body">
-        <div className="time num">{done ? 'GO' : `${mm}:${String(ss).padStart(2, '0')}`}</div>
-        <div className="sub">{subLabel(done, partner?.label, fromLabel)}</div>
+    <Overlay>
+      <div className={`rest-timer${done ? ' done' : ''}`}>
+        <svg className="ring" width="40" height="40" viewBox="0 0 40 40">
+          <circle cx="20" cy="20" r={R} stroke="var(--line-strong)" strokeWidth="3.5" fill="none" />
+          <circle
+            cx="20" cy="20" r={R}
+            stroke={done ? 'var(--green)' : 'var(--ember)'}
+            strokeWidth="3.5" fill="none" strokeLinecap="round"
+            strokeDasharray={C}
+            strokeDashoffset={C * (1 - frac)}
+            transform="rotate(-90 20 20)"
+            style={{ transition: 'stroke-dashoffset 0.25s linear' }}
+          />
+        </svg>
+        <div className="rt-body">
+          <div className="time num">{done ? 'GO' : `${mm}:${String(ss).padStart(2, '0')}`}</div>
+          <div className="sub">{subLabel(done, partner?.label, fromLabel)}</div>
+        </div>
+        <div className="actions">
+          {partner && (
+            <button className="btn-small accent" onClick={partner.onGo}>{partner.label}</button>
+          )}
+          <button className="btn-small" onClick={onDismiss}>{done ? 'OK' : 'Skip'}</button>
+        </div>
       </div>
-      <div className="actions">
-        {partner && (
-          <button className="btn-small accent" onClick={partner.onGo}>{partner.label}</button>
-        )}
-        <button className="btn-small" onClick={onDismiss}>{done ? 'OK' : 'Skip'}</button>
-      </div>
-    </div>
+    </Overlay>
   )
 }
 

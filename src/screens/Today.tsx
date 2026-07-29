@@ -18,6 +18,7 @@ import { pushSettings } from '../db/sync'
 import { lastSessionOf } from '../engine/history'
 import { recoveryByMuscle, daysSince } from '../engine/stats'
 import { AlertIcon, ChevronIcon, CloseIcon, LinkIcon, SwapIcon } from '../components/Icons'
+import { Overlay } from '../components/Overlay'
 import { formatNum } from '../components/Stepper'
 import type { ActiveWorkout } from '../App'
 
@@ -335,7 +336,7 @@ function WorkoutPreview({ dayType, history, settings, phase, bwAt, onClose, onSt
   const groupIndexOf = (id: string) => supersets.findIndex((g) => g.includes(id))
 
   return (
-    <>
+    <Overlay>
       <div className="sheet-backdrop" onClick={onClose} />
       <div className="sheet">
         <div className="sheet-head">
@@ -436,7 +437,7 @@ function WorkoutPreview({ dayType, history, settings, phase, bwAt, onClose, onSt
           Start {day.name}
         </button>
       </div>
-    </>
+    </Overlay>
   )
 }
 
