@@ -1861,14 +1861,159 @@ input[type='number'] {
 .rest-timer .actions {
   margin-left: auto;
   display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 6px;
-  flex-shrink: 0;
+}
+/* Three buttons on a phone-width bar is tight — this one drops its tracking
+   rather than pushing the clock off the end. */
+.rest-timer .actions .btn-small.tight {
+  letter-spacing: 0.05em;
+  font-size: 9.5px;
+  padding: 0 var(--s2);
 }
 .rest-timer.done {
   border-color: var(--green-line);
 }
 .rest-timer.done .time {
   color: var(--green);
+}
+
+/* ── Brick breaker ──────────────────────────────────────
+   A rest is dead time you're not allowed to skip, so it gets a
+   game. It's a modal in the app's own palette, and it goes when
+   the clock does. */
+/* Like the sheets, this renders into `.app-overlay` — so it measures from the
+   shell's box, and centres in the column with auto margins rather than the old
+   `left: 50%` translate. */
+.bb-modal {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  margin: 0 auto;
+  transform: translateY(-50%);
+  width: calc(100% - var(--gut) * 2);
+  max-width: 400px;
+  background: var(--surface);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-lg);
+  padding: var(--s3);
+  box-shadow: var(--shadow);
+  animation: bbIn 200ms var(--ease);
+}
+@keyframes bbIn {
+  from {
+    transform: translateY(-46%) scale(0.97);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(-50%) scale(1);
+    opacity: 1;
+  }
+}
+.bb-head {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  margin-bottom: var(--s3);
+}
+.bb-id {
+  min-width: 0;
+}
+.bb-level {
+  font-size: 13px;
+  font-weight: 660;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bb-meta {
+  color: var(--text-faint);
+  font-size: 9.5px;
+  font-weight: 650;
+  font-stretch: var(--w-cond);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin-top: 2px;
+}
+.bb-lives {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+.bb-life {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--r-pill);
+  background: var(--line-strong);
+}
+.bb-life.on {
+  background: var(--ember);
+}
+.bb-clock {
+  font-size: 15px;
+  font-weight: 680;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+.bb-close {
+  margin-right: -8px;
+}
+.bb-stage {
+  position: relative;
+}
+.bb-canvas {
+  display: block;
+  width: 100%;
+  /* Keep the field's proportions whatever the phone is, but never let it
+     grow past the viewport — height leads, width follows. */
+  max-width: calc(52dvh * 320 / 420);
+  margin: 0 auto;
+  aspect-ratio: 320 / 420;
+  border-radius: var(--r-sm);
+  background: var(--bg);
+  touch-action: none;
+  cursor: none;
+}
+.bb-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  text-align: center;
+  background: rgba(10, 9, 8, 0.72);
+  border-radius: var(--r-sm);
+  pointer-events: none;
+  animation: fadeIn var(--fast);
+}
+.bb-overlay .btn-small {
+  margin-top: var(--s2);
+  pointer-events: auto;
+}
+.bb-over-title {
+  font-size: 20px;
+  font-weight: 700;
+  font-stretch: 104%;
+  letter-spacing: -0.035em;
+}
+.bb-over-sub {
+  color: var(--text-dim);
+  font-size: 12px;
+}
+.bb-foot {
+  margin-top: var(--s3);
+  text-align: center;
+  color: var(--text-faint);
+  font-size: 9.5px;
+  font-weight: 650;
+  font-stretch: var(--w-cond);
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
 }
 
 /* ═══ Session summary ═════════════════════════════════════
