@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { cancelRestAlert, notifyRestDone, scheduleRestAlert } from '../notify'
 import { beep } from './chime'
+import { BrickBreaker } from './BrickBreaker'
 
 interface RestTimerProps {
   /** Unix ms when the rest period started; changes retrigger the timer. */
@@ -16,6 +17,7 @@ interface RestTimerProps {
 
 export function RestTimer({ startedAt, durationSec, soundOn, onDismiss, partner, fromLabel }: RestTimerProps) {
   const [now, setNow] = useState(Date.now())
+  const [playing, setPlaying] = useState(false)
   const beeped = useRef(false)
 
   useEffect(() => {
@@ -58,6 +60,12 @@ export function RestTimer({ startedAt, durationSec, soundOn, onDismiss, partner,
     }
   }, [done, soundOn])
 
+  // The game is a way to spend the rest, so it ends with the rest — no
+  // deciding between the next set and one more level.
+  useEffect(() => {
+    if (done) setPlaying(false)
+  }, [done])
+
   const frac = Math.min(1, elapsed / durationSec)
   const R = 16
   const C = 2 * Math.PI * R
@@ -66,6 +74,10 @@ export function RestTimer({ startedAt, durationSec, soundOn, onDismiss, partner,
   const ss = Math.floor(remaining % 60)
 
   return (
+    <>
+    {playing && !done && (
+      <BrickBreaker remainingSec={remaining} onClose={() => setPlaying(false)} />
+    )}
     <div className={`rest-timer${done ? ' done' : ''}`}>
       <svg className="ring" width="40" height="40" viewBox="0 0 40 40">
         <circle cx="20" cy="20" r={R} stroke="var(--line-strong)" strokeWidth="3.5" fill="none" />
@@ -87,9 +99,15 @@ export function RestTimer({ startedAt, durationSec, soundOn, onDismiss, partner,
         {partner && (
           <button className="btn-small accent" onClick={partner.onGo}>{partner.label}</button>
         )}
+        {/* Before Skip, so the dismiss button keeps the same corner whether or
+            not there's a game to open. */}
+        {!done && (
+          <button className="btn-small tight" onClick={() => setPlaying(true)}>Brick Breaker</button>
+        )}
         <button className="btn-small" onClick={onDismiss}>{done ? 'OK' : 'Skip'}</button>
       </div>
     </div>
+    </>
   )
 }
 
