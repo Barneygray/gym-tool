@@ -1312,6 +1312,11 @@ input[type='number'] {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* An excluded lift you searched for by name: still tappable, but visibly not
+   part of the list you're being offered. */
+.add-picker-row.blocked {
+  opacity: 0.5;
+}
 .add-picker-empty {
   color: var(--text-faint);
   font-size: 13px;

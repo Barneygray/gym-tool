@@ -18,6 +18,16 @@ tells you exactly what to lift next.
   (Setup → Exercises). Custom lifts are first-class: they show up as swap and
   add options and get the same progression engine, warm-ups, e1RM trend, and PR
   tracking as the built-ins.
+- **Exercises you never do** — a cranky lower back and deadlifts, a shoulder
+  that hates overhead pressing, or plain dislike: some lifts are simply not on
+  the menu. Swapping one away every session was the app's only answer, and the
+  rotation cheerfully offered it back next time. Setup → Never prescribe makes
+  that decision once — the lift drops out of the day rotation, the swap
+  suggestions and the add lists, on every gym and every device. A slot whose
+  whole pool you've excluded is refilled from the same muscle rather than
+  vanishing, so the day never comes up a lift short. Nothing already logged is
+  touched, and searching a picker for an excluded lift by name still surfaces
+  it, dimmed, for the session you change your mind.
 - **Progressive overload engine (double progression)** — each exercise has a rep
   range; you add reps at a fixed weight until every set tops the range, then the
   app bumps the weight and you rebuild. RPE sharpens the jumps and is read across
