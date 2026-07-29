@@ -14,6 +14,7 @@ import { newPRsInSession } from '../engine/stats'
 import { bodyweightAt, latestBodyweight } from '../engine/bodyweight'
 import { readinessEffect } from '../engine/readiness'
 import { activeProfile } from '../engine/equipment'
+import { excludedIds } from '../engine/exclusions'
 import { performancesOf } from '../engine/history'
 import { groupNames, groupsForMuscles } from '../engine/mobility'
 import { saveSession } from '../db/db'
@@ -58,7 +59,7 @@ export function WorkoutScreen(props: WorkoutProps) {
 }
 
 /** The station picker shown when a session has no exercises yet. */
-function EmptyWorkout({ active, setActive }: WorkoutProps) {
+function EmptyWorkout({ active, setActive, settings }: WorkoutProps) {
   const add = (id: string) =>
     setActive({ ...active, exerciseIds: [id], currentIndex: 0 })
 
@@ -80,7 +81,8 @@ function EmptyWorkout({ active, setActive }: WorkoutProps) {
         Pick a lift and go. Add more as you work through the session — nothing here is fixed.
       </p>
 
-      <ExercisePicker existing={[]} onPick={add} onCancel={() => setActive(null)} />
+      <ExercisePicker existing={[]} excluded={excludedIds(settings)} onPick={add}
+        onCancel={() => setActive(null)} />
     </>
   )
 }
@@ -102,6 +104,7 @@ function ActiveSession({ active, setActive, history, settings, bodyLog, onFinish
 
   const bwAt = useMemo(() => bodyweightAt(bodyLog), [bodyLog])
   const bodyweight = useMemo(() => latestBodyweight(bodyLog), [bodyLog])
+  const excluded = useMemo(() => excludedIds(settings), [settings])
 
   const index = Math.min(active.currentIndex, active.exerciseIds.length - 1)
   const exercise = getExercise(active.exerciseIds[index])
@@ -365,7 +368,8 @@ function ActiveSession({ active, setActive, history, settings, bodyLog, onFinish
       {picking && (
         <ExercisePicker
           existing={picking === 'swap' ? active.exerciseIds : active.exerciseIds}
-          suggested={picking === 'swap' ? swapOptions(exercise.id, active.exerciseIds) : []}
+          excluded={excluded}
+          suggested={picking === 'swap' ? swapOptions(exercise.id, active.exerciseIds, excluded) : []}
           placeholder={picking === 'swap' ? 'Swap for…' : 'Add an exercise…'}
           onPick={picking === 'swap' ? swapExercise : addExercise}
           onCancel={() => setPicking(null)}

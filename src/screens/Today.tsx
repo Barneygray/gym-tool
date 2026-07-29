@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import type { BodyLog, DayId, Muscle, ReadinessLevel, Session, Settings } from '../types'
 import { FREESTYLE } from '../types'
 import { DAYS, dayById } from '../data/days'
-import { EXERCISES, getExercise, loadBasisTag } from '../data/exercises'
+import { getExercise, loadBasisTag } from '../data/exercises'
 import { generateWorkout, swapOptions } from '../engine/rotation'
 import { suggestFor } from '../engine/progression'
 import { recommendDay } from '../engine/coach'
@@ -12,12 +12,14 @@ import { dayLabel, mondayIndex, resolveWeekPlan, shortDayLabel, weeklyPlan } fro
 import { READINESS_LEVELS, readinessEffect, readinessLabel } from '../engine/readiness'
 import { bodyweightAt } from '../engine/bodyweight'
 import { activeProfile, profilesOf } from '../engine/equipment'
+import { excludedIds } from '../engine/exclusions'
 import { groupNames } from '../engine/mobility'
 import { saveSettings } from '../db/db'
 import { pushSettings } from '../db/sync'
 import { lastSessionOf } from '../engine/history'
 import { recoveryByMuscle, daysSince } from '../engine/stats'
 import { AlertIcon, ChevronIcon, CloseIcon, LinkIcon, SwapIcon } from '../components/Icons'
+import { ExercisePicker } from '../components/ExercisePicker'
 import { formatNum } from '../components/Stepper'
 import type { ActiveWorkout } from '../App'
 
@@ -286,7 +288,8 @@ function WorkoutPreview({ dayType, history, settings, phase, bwAt, onClose, onSt
   onStart: (exerciseIds: string[], supersets: string[][], readiness: ReadinessLevel | null) => void
 }) {
   const day = dayById.get(dayType)!
-  const [exerciseIds, setExerciseIds] = useState<string[]>(() => generateWorkout(day, history))
+  const excluded = useMemo(() => excludedIds(settings), [settings])
+  const [exerciseIds, setExerciseIds] = useState<string[]>(() => generateWorkout(day, history, excluded))
   // Ids "joined" to the exercise directly above them, forming a superset.
   const [joined, setJoined] = useState<Set<string>>(new Set())
   const [adding, setAdding] = useState(false)
@@ -295,7 +298,7 @@ function WorkoutPreview({ dayType, history, settings, phase, bwAt, onClose, onSt
   const readyNote = readinessEffect(readiness)?.note ?? ''
 
   const swap = (index: number) => {
-    const options = swapOptions(exerciseIds[index], exerciseIds)
+    const options = swapOptions(exerciseIds[index], exerciseIds, excluded)
     if (options.length === 0) return
     // Cycle through the like-exercise list on repeated taps.
     setExerciseIds((ids) => {
@@ -419,8 +422,9 @@ function WorkoutPreview({ dayType, history, settings, phase, bwAt, onClose, onSt
         </div>
 
         {adding ? (
-          <AddExercisePicker
+          <ExercisePicker
             existing={exerciseIds}
+            excluded={excluded}
             onPick={addExercise}
             onCancel={() => setAdding(false)}
           />
@@ -437,37 +441,5 @@ function WorkoutPreview({ dayType, history, settings, phase, bwAt, onClose, onSt
         </button>
       </div>
     </>
-  )
-}
-
-function AddExercisePicker({ existing, onPick, onCancel }: {
-  existing: string[]
-  onPick: (id: string) => void
-  onCancel: () => void
-}) {
-  const [query, setQuery] = useState('')
-  const taken = new Set(existing)
-  const q = query.trim().toLowerCase()
-  const options = EXERCISES
-    .filter((e) => !taken.has(e.id) && (q === '' || e.name.toLowerCase().includes(q)))
-    .sort((a, b) => a.name.localeCompare(b.name))
-
-  return (
-    <div className="add-picker">
-      <div className="add-picker-head">
-        <input autoFocus placeholder="Search exercises…" value={query}
-          onChange={(e) => setQuery(e.target.value)} style={{ flex: 1 }} />
-        <button className="btn-small" onClick={onCancel}>Done</button>
-      </div>
-      <div className="add-picker-list">
-        {options.length === 0 && <div className="add-picker-empty">No matches.</div>}
-        {options.map((e) => (
-          <button key={e.id} className="add-picker-row" onClick={() => onPick(e.id)}>
-            <span className="name">{e.name}</span>
-            <span className="muscle-tag">{MUSCLE_LABEL[e.primary]}</span>
-          </button>
-        ))}
-      </div>
-    </div>
   )
 }
