@@ -117,9 +117,20 @@ export async function getHistory(): Promise<Session[]> {
   return all.filter((s) => s.finishedAt !== undefined && s.deletedAt === undefined)
 }
 
-export async function saveSession(session: Session): Promise<number> {
+/**
+ * Write a session, reusing the row a session with the same uuid already
+ * occupies. Resuming a finished session re-saves it under its original
+ * identity, and without reusing the auto-increment key Dexie would file the
+ * same workout a second time. Returns the stamped row so the caller pushes
+ * exactly what was stored, keeping local and remote write times identical.
+ */
+export async function saveSession(session: Session): Promise<Session> {
   const withUuid = session.uuid ? session : { ...session, uuid: crypto.randomUUID() }
-  return db.sessions.put({ ...withUuid, updatedAt: Date.now() })
+  const existing = await db.sessions.where('uuid').equals(withUuid.uuid).first()
+  const next: Session = { ...withUuid, updatedAt: Date.now() }
+  if (existing?.id !== undefined) next.id = existing.id
+  await db.sessions.put(next)
+  return next
 }
 
 /**

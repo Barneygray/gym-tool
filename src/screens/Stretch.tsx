@@ -46,8 +46,7 @@ export function StretchScreen({ history, onLogged, focus = [] }: StretchProps) {
       finishedAt: t,
       entries: [...selected].map((id) => ({ exerciseId: id, sets: [{ weight: 0, reps: 1 }] })),
     }
-    await saveSession(session)
-    void pushSession(session)
+    void pushSession(await saveSession(session))
     setSelected(new Set())
     await onLogged()
   }

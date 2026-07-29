@@ -17,8 +17,9 @@ import { groupNames } from '../engine/mobility'
 import { saveSettings } from '../db/db'
 import { pushSettings } from '../db/sync'
 import { lastSessionOf } from '../engine/history'
+import { finishedAgoLabel, resumableSession, resumeWorkout } from '../engine/resume'
 import { recoveryByMuscle, daysSince } from '../engine/stats'
-import { AlertIcon, ChevronIcon, CloseIcon, LinkIcon, SwapIcon } from '../components/Icons'
+import { AlertIcon, ChevronIcon, CloseIcon, HistoryIcon, LinkIcon, SwapIcon } from '../components/Icons'
 import { ExercisePicker } from '../components/ExercisePicker'
 import { formatNum } from '../components/Stepper'
 import type { ActiveWorkout } from '../App'
@@ -59,6 +60,9 @@ export function TodayScreen({ history, settings, bodyLog, startWorkout, onChange
   )
   const plan = useMemo(() => weeklyPlan(now, 4, 0, slots), [now, slots])
   const planned = plan.filter((d) => d.dayType).length
+  // Today's session is still open to being carried on with — you may have hit
+  // Finish halfway through, or just have more left in you.
+  const resumable = useMemo(() => resumableSession(history, now), [history, now])
   const custom = settings.weekPlan != null
   const todayIdx = mondayIndex(now)
 
@@ -75,6 +79,14 @@ export function TodayScreen({ history, settings, bodyLog, startWorkout, onChange
       {phase && <div className={`block-banner ${phase.phase}`}>
         <div className="block-note">{phase.note}</div>
       </div>}
+
+      {resumable && (
+        <ResumeCard
+          session={resumable}
+          now={now}
+          onResume={() => startWorkout(resumeWorkout(resumable))}
+        />
+      )}
 
       <button className="coach-card" onClick={() => setPreviewDay(rec.dayType)}>
         <div className="coach-kind">{rec.fromPlan ? 'Today’s plan' : 'Train next'}</div>
@@ -228,6 +240,44 @@ export function TodayScreen({ history, settings, bodyLog, startWorkout, onChange
   )
 }
 
+
+const sessionName = (dayType: Session['dayType']) =>
+  dayType === FREESTYLE ? 'Freestyle' : dayLabel(dayType)
+
+/**
+ * Finish is a single tap in the workout header, and everywhere else in the app
+ * it's final — so for the rest of the day the session it wrote stays open to
+ * being picked back up, whether it ended by mis-tap or you simply have more in
+ * you. Continuing reopens the same record rather than starting a second one, so
+ * an interrupted workout doesn't read in the log as two short ones an hour
+ * apart, with the second one's suggestions built on the first.
+ */
+function ResumeCard({ session, now, onResume }: {
+  session: Session
+  now: number
+  onResume: () => void
+}) {
+  const exercises = session.entries.length
+  const sets = session.entries.reduce((t, e) => t + e.sets.length, 0)
+
+  return (
+    <div className="resume-card">
+      <div style={{ minWidth: 0 }}>
+        <div className="resume-kind">
+          <HistoryIcon size={13} />
+          <span>Logged {finishedAgoLabel(session, now)}</span>
+        </div>
+        <div className="resume-day">{sessionName(session.dayType)}</div>
+        {/* The button says what happens; this only has to say what's there to
+            go back to. */}
+        <div className="resume-meta num">
+          {exercises} exercise{exercises === 1 ? '' : 's'} · {sets} set{sets === 1 ? '' : 's'} logged
+        </div>
+      </div>
+      <button className="btn-small accent" onClick={onResume}>Continue</button>
+    </div>
+  )
+}
 
 /**
  * Only appears once there's more than one gym. Switching re-points plate math,
