@@ -2580,6 +2580,94 @@ input[type='number'] {
 }
 
 /* ═══ Settings ════════════════════════════════════════════ */
+/* Setup is an index of pages. Each row states what its page is
+   currently set to, so the index reads as a summary of the whole
+   configuration and most visits never open anything. */
+.setup-index {
+  display: flex;
+  flex-direction: column;
+}
+.setup-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+  width: 100%;
+  text-align: left;
+  padding: var(--s4) 0;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  transition: background var(--fast);
+}
+.setup-row:last-child {
+  border-bottom: none;
+}
+/* Bleed the press state into the gutter so the whole strip lights
+   up, not a box inset from the rule it sits on. */
+.setup-row:active {
+  background: var(--surface-2);
+  box-shadow: calc(var(--gut) * -1) 0 0 var(--surface-2), var(--gut) 0 0 var(--surface-2);
+}
+.setup-row .sr-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.setup-row .k {
+  font-weight: 600;
+  font-size: 15px;
+  font-stretch: 101%;
+  letter-spacing: -0.024em;
+  color: var(--text);
+}
+.setup-row .sub {
+  margin-top: 2px;
+}
+.setup-row .sr-chevron {
+  display: flex;
+  flex-shrink: 0;
+  color: var(--text-faint);
+}
+
+/* A sub-page keeps the masthead but trades the rule for a back
+   arrow — the arrow *is* the signal you're one level down. */
+.setup-head {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  margin: 0 0 var(--s3) calc(var(--s3) * -1);
+}
+.setup-head .screen-title {
+  font-size: 27px;
+  min-width: 0;
+}
+
+/* What's on this device, as figures rather than a sentence — the
+   same manifest a restore quotes back at you before it runs. */
+.data-counts {
+  margin-top: var(--s4);
+  border-top: 1px solid var(--line);
+}
+.data-count {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s3);
+  padding: var(--s2) 0;
+  border-bottom: 1px solid var(--line);
+}
+.data-count dt {
+  font-size: 12.5px;
+  color: var(--text-dim);
+}
+.data-count dd {
+  font-size: 15px;
+  font-weight: 700;
+  font-stretch: var(--w-wide);
+  flex-shrink: 0;
+}
+
 .settings-row {
   display: flex;
   align-items: center;
