@@ -14,9 +14,11 @@ import { newPRsInSession } from '../engine/stats'
 import { bodyweightAt, latestBodyweight } from '../engine/bodyweight'
 import { readinessEffect } from '../engine/readiness'
 import { activeProfile } from '../engine/equipment'
+import { excludedIds } from '../engine/exclusions'
 import { performancesOf } from '../engine/history'
 import { groupNames, groupsForMuscles } from '../engine/mobility'
-import { saveSession } from '../db/db'
+import { resumeWorkout, withoutSession } from '../engine/resume'
+import { deleteSession, saveSession } from '../db/db'
 import { pushSession } from '../db/sync'
 import { useWakeLock } from '../hooks/useWakeLock'
 import { Stepper, formatNum } from '../components/Stepper'
@@ -58,7 +60,7 @@ export function WorkoutScreen(props: WorkoutProps) {
 }
 
 /** The station picker shown when a session has no exercises yet. */
-function EmptyWorkout({ active, setActive }: WorkoutProps) {
+function EmptyWorkout({ active, setActive, settings }: WorkoutProps) {
   const add = (id: string) =>
     setActive({ ...active, exerciseIds: [id], currentIndex: 0 })
 
@@ -80,12 +82,20 @@ function EmptyWorkout({ active, setActive }: WorkoutProps) {
         Pick a lift and go. Add more as you work through the session — nothing here is fixed.
       </p>
 
-      <ExercisePicker existing={[]} onPick={add} onCancel={() => setActive(null)} />
+      <ExercisePicker existing={[]} excluded={excludedIds(settings)} onPick={add}
+        onCancel={() => setActive(null)} />
     </>
   )
 }
 
-function ActiveSession({ active, setActive, history, settings, bodyLog, onFinished, onStretch }: WorkoutProps) {
+function ActiveSession({
+  active, setActive, history: logged, settings, bodyLog, onFinished, onStretch,
+}: WorkoutProps) {
+  // A continued session is already in the log, so left in the history it would
+  // be its own "last time" — every station would try to progress on top of the
+  // sets you did twenty minutes ago. The engine reads the workout as it stood
+  // when you started it.
+  const history = useMemo(() => withoutSession(logged, active.sessionUuid), [logged, active.sessionUuid])
   const [summary, setSummary] = useState<{ session: Session; prs: ReturnType<typeof newPRsInSession> } | null>(null)
   /** The cool-down block chosen on the summary, once it's running. */
   const [cooldown, setCooldown] = useState<CooldownPlan | null>(null)
@@ -102,6 +112,7 @@ function ActiveSession({ active, setActive, history, settings, bodyLog, onFinish
 
   const bwAt = useMemo(() => bodyweightAt(bodyLog), [bodyLog])
   const bodyweight = useMemo(() => latestBodyweight(bodyLog), [bodyLog])
+  const excluded = useMemo(() => excludedIds(settings), [settings])
 
   const index = Math.min(active.currentIndex, active.exerciseIds.length - 1)
   const exercise = getExercise(active.exerciseIds[index])
@@ -270,11 +281,20 @@ function ActiveSession({ active, setActive, history, settings, bodyLog, onFinish
       .map((id) => ({ exerciseId: id, sets: active.logged[id] ?? [] }))
       .filter((e) => e.sets.length > 0)
     if (entries.length === 0) {
+      // Stripping a continued session back to nothing means undoing it, not
+      // leaving the version already in the log standing.
+      if (active.sessionUuid) {
+        const tombstoned = await deleteSession(active.sessionUuid)
+        if (tombstoned) void pushSession(tombstoned)
+        await onFinished()
+      }
       setActive(null)
       return
     }
     const session: Session = {
-      uuid: crypto.randomUUID(),
+      // Continuing rewrites the record it came from — same identity, same start
+      // time — so an interrupted workout stays one workout in the log.
+      uuid: active.sessionUuid ?? crypto.randomUUID(),
       dayType: active.dayType,
       startedAt: active.startedAt,
       finishedAt: Date.now(),
@@ -282,8 +302,7 @@ function ActiveSession({ active, setActive, history, settings, bodyLog, onFinish
       ...(active.readiness ? { readiness: active.readiness } : {}),
       profileId: activeProfile(settings).id,
     }
-    await saveSession(session)
-    void pushSession(session)
+    void pushSession(await saveSession(session))
     const prs = newPRsInSession(session, [session, ...history], bwAt)
     await onFinished()
     setRest(null)
@@ -312,6 +331,10 @@ function ActiveSession({ active, setActive, history, settings, bodyLog, onFinish
         onDone={() => setActive(null)}
         onStretch={onStretch}
         onCooldown={setCooldown}
+        onResume={() => {
+          setSummary(null)
+          setActive(resumeWorkout(summary.session))
+        }}
       />
     )
   }
@@ -365,7 +388,8 @@ function ActiveSession({ active, setActive, history, settings, bodyLog, onFinish
       {picking && (
         <ExercisePicker
           existing={picking === 'swap' ? active.exerciseIds : active.exerciseIds}
-          suggested={picking === 'swap' ? swapOptions(exercise.id, active.exerciseIds) : []}
+          excluded={excluded}
+          suggested={picking === 'swap' ? swapOptions(exercise.id, active.exerciseIds, excluded) : []}
           placeholder={picking === 'swap' ? 'Swap for…' : 'Add an exercise…'}
           onPick={picking === 'swap' ? swapExercise : addExercise}
           onCancel={() => setPicking(null)}
@@ -578,13 +602,14 @@ function relativeDay(ts: number): string {
   return new Date(ts).toLocaleDateString('en', { day: 'numeric', month: 'short' })
 }
 
-function SummaryView({ summary, dayType, history, onDone, onStretch, onCooldown }: {
+function SummaryView({ summary, dayType, history, onDone, onStretch, onCooldown, onResume }: {
   summary: { session: Session; prs: ReturnType<typeof newPRsInSession> }
   dayType: string
   history: Session[]
   onDone: () => void
   onStretch: (groupIds: string[]) => void
   onCooldown: (plan: CooldownPlan) => void
+  onResume: () => void
 }) {
   const { session, prs } = summary
   // The cool-down asks itself, straight away. Left to a button on a summary
@@ -653,6 +678,14 @@ function SummaryView({ summary, dayType, history, onDone, onStretch, onCooldown 
 
       <div style={{ height: 'var(--s5)' }} />
       <button className="btn-primary" onClick={onDone}>Done</button>
+
+      {/* Finish sits in the header, one thumb-width from everything else you
+          tap mid-session. The recovery belongs on the screen the mis-tap lands
+          you on, not three taps away — and it costs nothing: the session is
+          saved either way, continuing just reopens it. */}
+      <button className="undo-finish" onClick={onResume}>
+        Not finished? Carry on with this session
+      </button>
 
       {picking && (
         <CooldownSheet

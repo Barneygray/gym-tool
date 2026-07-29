@@ -36,6 +36,12 @@ export interface ActiveWorkout {
   supersets?: string[][]
   /** Pre-session self-rating, when the readiness check is on. */
   readiness?: ReadinessLevel | null
+  /**
+   * Set when this is a finished session reopened to carry on with. Finishing
+   * again rewrites that record rather than filing a second one, so a workout
+   * interrupted by a mis-tapped Finish stays one workout.
+   */
+  sessionUuid?: string
 }
 
 const ACTIVE_KEY = 'forge-active-workout'

@@ -92,8 +92,7 @@ export function CooldownScreen({ plan, soundOn, onLogged, onDone }: CooldownProp
             finishedAt: Date.now(),
             entries: cooldownEntries(items),
           }
-          await saveSession(session)
-          void pushSession(session)
+          void pushSession(await saveSession(session))
           await onLogged()
           onDone()
         }}
