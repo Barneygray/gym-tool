@@ -410,6 +410,35 @@ input[type='number'] {
   transition: color var(--fast);
 }
 
+/* ── Overlay layer ────────────────────────────────────────
+   Home for everything that docks to the bottom of the screen:
+   sheets, their backdrop, the rest timer. They used to be
+   `position: fixed`, which measures from the layout viewport —
+   the same box that once left the tab bar floating 60px clear
+   of the bottom edge.
+
+   The tab bar was moved onto `.app` to fix that; these were
+   not, so the two ended up measuring from different bottom
+   edges, and on a phone they disagree by the height of whatever
+   browser bar is showing. That put the last control on a sheet
+   ("Delete session" sits 20px off the bottom edge) inside the
+   band the tab bar and the browser's own bar occupy, where the
+   tap lands on the wrong thing.
+
+   As a child of `.app`, `position: absolute` in here resolves
+   against the visible box, exactly like the tab bar. The layer
+   is transparent to pointer events so the app underneath stays
+   live while it's empty; its children take theirs back. */
+.app-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  pointer-events: none;
+}
+.app-overlay > * {
+  pointer-events: auto;
+}
+
 /* ═══ Surfaces ════════════════════════════════════════════ */
 .card {
   background: var(--surface);
@@ -1033,31 +1062,32 @@ input[type='number'] {
   order: 1;
 }
 
-/* ═══ Sheets ══════════════════════════════════════════════ */
+/* ═══ Sheets ══════════════════════════════════════════════
+   Both of these render into `.app-overlay`, so they're sized
+   and placed by it: `absolute` here is the shell's box, which
+   is already the 480px column, so neither needs a width, a
+   max-width or the old `left: 50%` / `translateX(-50%)`
+   centring. Stacking is DOM order inside the layer. */
 .sheet-backdrop {
-  position: fixed;
+  position: absolute;
   inset: 0;
   background: rgba(4, 3, 3, 0.66);
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
-  z-index: 50;
   animation: fadeIn var(--med);
 }
 .sheet {
-  position: fixed;
+  position: absolute;
   bottom: 0;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 100%;
-  max-width: 480px;
-  max-height: 90dvh;
+  left: 0;
+  right: 0;
+  max-height: 90%;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   background: var(--surface);
   border-radius: var(--r-lg) var(--r-lg) 0 0;
   border-top: 1px solid var(--line-2);
   padding: var(--s3) var(--gut) calc(var(--s5) + env(safe-area-inset-bottom));
-  z-index: 51;
   box-shadow: var(--shadow-lg);
   animation: slideUp 280ms var(--ease);
 }
@@ -1096,11 +1126,11 @@ input[type='number'] {
 }
 @keyframes slideUp {
   from {
-    transform: translate(-50%, 20px);
+    transform: translateY(20px);
     opacity: 0;
   }
   to {
-    transform: translate(-50%, 0);
+    transform: translateY(0);
     opacity: 1;
   }
 }
@@ -1767,13 +1797,15 @@ input[type='number'] {
 }
 
 /* ── Rest timer ─────────────────────────────────────────── */
+/* Docked in `.app-overlay` like the sheets are, so it rests on
+   the bottom edge you can see rather than the layout viewport's;
+   inset by the gutter off both sides of the shell rather than
+   centred on a width it has to work out for itself. */
 .rest-timer {
-  position: fixed;
+  position: absolute;
   bottom: calc(var(--s3) + env(safe-area-inset-bottom));
-  left: 50%;
-  transform: translateX(-50%);
-  width: calc(100% - var(--gut) * 2);
-  max-width: 444px;
+  left: var(--gut);
+  right: var(--gut);
   display: flex;
   align-items: center;
   gap: var(--s3);
@@ -1784,7 +1816,6 @@ input[type='number'] {
   border-radius: var(--r-md);
   padding: var(--s3);
   box-shadow: var(--shadow);
-  z-index: 45;
   animation: slideUpSmall 240ms var(--ease);
 }
 @supports not (background: color-mix(in srgb, red 50%, transparent)) {
@@ -1794,11 +1825,11 @@ input[type='number'] {
 }
 @keyframes slideUpSmall {
   from {
-    transform: translate(-50%, 14px);
+    transform: translateY(14px);
     opacity: 0;
   }
   to {
-    transform: translate(-50%, 0);
+    transform: translateY(0);
     opacity: 1;
   }
 }

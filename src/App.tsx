@@ -10,6 +10,7 @@ import { bodyweightAt } from './engine/bodyweight'
 import { applyActiveProfile } from './engine/equipment'
 import { notifyTrainingReminder } from './notify'
 import { BarbellIcon, ChartIcon, GearIcon, HistoryIcon, KettlebellIcon, StretchIcon } from './components/Icons'
+import { OverlayHostContext } from './components/Overlay'
 import { TodayScreen } from './screens/Today'
 import { WorkoutScreen } from './screens/Workout'
 import { Onboarding } from './screens/Onboarding'
@@ -64,6 +65,9 @@ export default function App() {
   const [goals, setGoals] = useState<Goal[]>([])
   const [active, setActiveState] = useState<ActiveWorkout | null>(loadActive)
   const [ready, setReady] = useState(false)
+  // The node sheets and the rest timer portal into. It has to be a child of
+  // `.app` for them to measure against the same bottom edge as the tab bar.
+  const [overlayHost, setOverlayHost] = useState<HTMLElement | null>(null)
   const [syncing, setSyncing] = useState(false)
   const [syncError, setSyncError] = useState<string | null>(null)
   const refreshRef = useRef<() => Promise<void>>(async () => {})
@@ -156,64 +160,72 @@ export default function App() {
   const inWorkout = active !== null && tab === 'today'
 
   return (
-    <div className="app">
-      {/* A live session hides the tab bar, so `full` takes back the space
-          reserved for it — the screen used to end in ~100px of nothing. */}
-      <main className={`app-main${inWorkout ? ' full' : ''}`}>
-        {inWorkout ? (
-          <WorkoutScreen
-            active={active}
-            setActive={setActive}
-            history={history}
-            settings={equipped}
-            bodyLog={bodyLog}
-            onFinished={refresh}
-            onStretch={(groups) => {
-              setActive(null)
-              setStretchFocus(groups)
-              setTab('stretch')
-            }}
-          />
-        ) : (
-          <>
-            {tab === 'today' && (
-              <TodayScreen history={history} settings={equipped} bodyLog={bodyLog}
-                startWorkout={setActive} onChanged={refresh} />
-            )}
-            <Suspense fallback={<div className="screen-loading">Loading…</div>}>
-              {tab === 'log' && <LogScreen history={history} onChanged={refresh} />}
-              {tab === 'stretch' && (
-                <StretchScreen history={history} onLogged={refresh} focus={stretchFocus} />
+    <OverlayHostContext.Provider value={overlayHost}>
+      <div className="app">
+        {/* A live session hides the tab bar, so `full` takes back the space
+            reserved for it — the screen used to end in ~100px of nothing. */}
+        <main className={`app-main${inWorkout ? ' full' : ''}`}>
+          {inWorkout ? (
+            <WorkoutScreen
+              active={active}
+              setActive={setActive}
+              history={history}
+              settings={equipped}
+              bodyLog={bodyLog}
+              onFinished={refresh}
+              onStretch={(groups) => {
+                setActive(null)
+                setStretchFocus(groups)
+                setTab('stretch')
+              }}
+            />
+          ) : (
+            <>
+              {tab === 'today' && (
+                <TodayScreen history={history} settings={equipped} bodyLog={bodyLog}
+                  startWorkout={setActive} onChanged={refresh} />
               )}
-              {tab === 'condition' && <ConditioningScreen history={history} onLogged={refresh} />}
-              {tab === 'progress' && (
-                <ProgressScreen history={history} bodyLog={bodyLog} goals={goals} onChanged={refresh} />
-              )}
-              {tab === 'settings' && (
-                <SettingsScreen
-                  settings={settings}
-                  onChanged={refresh}
-                  syncing={syncing}
-                  onSyncNow={syncNow}
-                  syncError={syncError}
-                />
-              )}
-            </Suspense>
-          </>
-        )}
-      </main>
+              <Suspense fallback={<div className="screen-loading">Loading…</div>}>
+                {tab === 'log' && <LogScreen history={history} onChanged={refresh} />}
+                {tab === 'stretch' && (
+                  <StretchScreen history={history} onLogged={refresh} focus={stretchFocus} />
+                )}
+                {tab === 'condition' && <ConditioningScreen history={history} onLogged={refresh} />}
+                {tab === 'progress' && (
+                  <ProgressScreen history={history} bodyLog={bodyLog} goals={goals} onChanged={refresh} />
+                )}
+                {tab === 'settings' && (
+                  <SettingsScreen
+                    settings={settings}
+                    onChanged={refresh}
+                    syncing={syncing}
+                    onSyncNow={syncNow}
+                    syncError={syncError}
+                  />
+                )}
+              </Suspense>
+            </>
+          )}
+        </main>
 
-      {!inWorkout && (
-        <nav className="tabbar">
-          <TabButton id="today" label="Train" current={tab} onSelect={setTab}><BarbellIcon /></TabButton>
-          <TabButton id="log" label="Log" current={tab} onSelect={setTab}><HistoryIcon /></TabButton>
-          <TabButton id="stretch" label="Stretch" current={tab} onSelect={setTab}><StretchIcon /></TabButton>
-          <TabButton id="condition" label="Condition" current={tab} onSelect={setTab}><KettlebellIcon /></TabButton>
-          <TabButton id="progress" label="Progress" current={tab} onSelect={setTab}><ChartIcon /></TabButton>
-          <TabButton id="settings" label="Setup" current={tab} onSelect={setTab}><GearIcon /></TabButton>
-        </nav>
-      )}
-    </div>
+        {!inWorkout && (
+          <nav className="tabbar">
+            <TabButton id="today" label="Train" current={tab} onSelect={setTab}><BarbellIcon /></TabButton>
+            <TabButton id="log" label="Log" current={tab} onSelect={setTab}><HistoryIcon /></TabButton>
+            <TabButton id="stretch" label="Stretch" current={tab} onSelect={setTab}><StretchIcon /></TabButton>
+            <TabButton id="condition" label="Condition" current={tab} onSelect={setTab}><KettlebellIcon /></TabButton>
+            <TabButton id="progress" label="Progress" current={tab} onSelect={setTab}><ChartIcon /></TabButton>
+            <TabButton id="settings" label="Setup" current={tab} onSelect={setTab}><GearIcon /></TabButton>
+          </nav>
+        )}
+
+        {/* Everything that docks to the bottom of the screen renders in here,
+            so it measures against `.app` — the box that tracks what's visible —
+            instead of against the layout viewport the way `position: fixed`
+            would. See `components/Overlay.tsx`. */}
+        <div className="app-overlay" ref={setOverlayHost} />
+      </div>
+    </OverlayHostContext.Provider>
   )
 }
 
