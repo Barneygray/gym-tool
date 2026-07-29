@@ -188,8 +188,7 @@ function AddSession({ onClose, onChanged }: {
       finishedAt: startedAt,
       entries: cleaned,
     }
-    await saveSession(session)
-    void pushSession(session)
+    void pushSession(await saveSession(session))
     await onChanged()
     onClose()
   }

@@ -50,6 +50,14 @@ tells you exactly what to lift next.
   sets against is protected from a swap or skip so the work can't be stranded.
   And when there's no plan at all, **Freestyle** starts an empty session you build
   as you go — the same progression engine, warm-ups, PRs, and stats apply.
+- **Finish isn't final until tomorrow** — Finish sits one thumb-width from
+  everything else you tap mid-session, and hitting it early used to cost you the
+  rest of the workout. Today's session stays re-openable: **Continue** on the
+  summary screen, or from a card at the top of Train for the rest of the day.
+  Continuing reopens the *same* record — same start time, sets restored, engine
+  reading the history as it stood when you began — so an interrupted workout
+  stays one workout rather than two short ones an hour apart, the second of them
+  prescribing progression on top of the first.
 - **Readiness check** (opt in, Setup → Autoregulation) — the log can't see that
   you slept four hours. Rate how you feel before a session and the day's
   prescription bends to match: a rough day trims a set and backs the load off
