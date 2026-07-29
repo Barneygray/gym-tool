@@ -14,14 +14,20 @@ export default defineConfig(({ mode }) => ({
         name: 'Forge — Gym Helper',
         short_name: 'Forge',
         description: 'Personal training log with progressive overload suggestions',
-        theme_color: '#0a0a0c',
-        background_color: '#0a0a0c',
+        // Matches --bg in global.css. The old #0a0a0c was a cool near-black
+        // the app never uses, so the splash and status bar sat a shade off
+        // the UI they framed.
+        theme_color: '#0a0908',
+        background_color: '#0a0908',
         display: 'standalone',
         orientation: 'portrait',
+        // Icons are generated — see scripts/build-icons.mjs. The maskable
+        // entry is a separate file on purpose: it carries the mark inset to
+        // the 40% safe zone, which the rounded `any` tile can't also do.
         icons: [
-          { src: 'icon-192.png', sizes: '192x192', type: 'image/png' },
-          { src: 'icon-512.png', sizes: '512x512', type: 'image/png' },
-          { src: 'icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+          { src: 'icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+          { src: 'icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+          { src: 'icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
       },
       workbox: {
