@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useMemo, useState } from 'react'
+import { Suspense, useEffect, useMemo, useState } from 'react'
 import type { BodyLog, Session, SetLog, Settings } from '../types'
 import { FREESTYLE } from '../types'
 import {
@@ -28,6 +28,7 @@ import { CooldownSheet } from '../components/CooldownSheet'
 import type { CooldownPlan } from '../engine/cooldown'
 import { nextPartner } from '../engine/superset'
 import { BackIcon, CaretIcon, CloseIcon, LinkIcon, SwapIcon, TrashIcon, TrophyIcon } from '../components/Icons'
+import { lazyScreen } from '../components/lazyScreen'
 import type { ActiveWorkout } from '../App'
 
 const KIND_LABEL = {
@@ -36,7 +37,7 @@ const KIND_LABEL = {
 
 // The guided cool-down runs after the session is already saved, so it has no
 // business being in the chunk that has to paint at the start of one.
-const CooldownScreen = lazy(() => import('./Cooldown').then((m) => ({ default: m.CooldownScreen })))
+const CooldownScreen = lazyScreen(() => import('./Cooldown').then((m) => ({ default: m.CooldownScreen })))
 
 interface WorkoutProps {
   active: ActiveWorkout
