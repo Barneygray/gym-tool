@@ -3234,6 +3234,20 @@ input[type='number'] {
   margin: 0;
 }
 
+/* Waiting on Begin: the ring holds the block's length rather than a
+   count, which is four characters where two normally sit. */
+.cool-stage.ready .cool-count {
+  font-size: 32px;
+  color: var(--text-dim);
+}
+.cool-begin-note {
+  margin-top: var(--s3);
+  text-align: center;
+  color: var(--text-faint);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
 /* The block's running order, ticked off as it goes. Same ledger
    rows as the Stretch tab, minus the checkbox affordance —
    nothing here is tapped, the clock does the ticking. */
