@@ -552,6 +552,10 @@ function ActiveSession({
             ? { label: getExercise(partnerId).name, onGo: () => { setRest(null); goToId(partnerId) } }
             : undefined}
           fromLabel={rest.exerciseId === exercise.id ? undefined : getExercise(rest.exerciseId).name}
+          // Start time, not the session uuid: a workout only gets a uuid once
+          // it's been saved, and the brick breaker run has to survive that
+          // moment without the session changing identity underneath it.
+          sessionKey={String(active.startedAt)}
         />
       )}
     </>

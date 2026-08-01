@@ -1,14 +1,20 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
-  BALL_R, BREAKER_LEVELS, FIELD_H, FIELD_W, PADDLE_H, PADDLE_Y, WALL,
+  BALL_R, BREAKER_LEVELS, FIELD_H, FIELD_W, LIVES, PADDLE_H, PADDLE_Y, WALL,
   launch, movePaddle, newGame, step, type BreakerState,
 } from '../engine/breaker'
+import { loadMemory, nextRun, saveMemory } from '../engine/breakerMemory'
 import { CloseIcon } from './Icons'
 import { Overlay } from './Overlay'
 
 interface BrickBreakerProps {
   /** Seconds left on the rest clock — the game never hides the reason you're here. */
   remainingSec: number
+  /**
+   * The workout this rest belongs to. The run is remembered across the whole of
+   * it, so closing the game between sets is a pause, not a forfeit.
+   */
+  sessionKey: string
   onClose: () => void
 }
 
@@ -25,11 +31,26 @@ interface Hud {
  * follows your thumb, and five levels. The clock stays in the header and the
  * whole thing is torn down the moment rest is over — this is somewhere to put
  * ninety seconds, not somewhere to be when the next set starts.
+ *
+ * Torn down, but not forgotten: the run is stored against the session, so the
+ * next rest opens on the level you were on with the bricks you'd already
+ * broken. Five levels is more than ninety seconds' worth; an hour of rests is
+ * about right.
  */
-export function BrickBreaker({ remainingSec, onClose }: BrickBreakerProps) {
+export function BrickBreaker({ remainingSec, sessionKey, onClose }: BrickBreakerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const game = useRef<BreakerState>(newGame())
+  // Read once, at the top of the rest: whatever this session had going.
+  const [carried] = useState(() => loadMemory(sessionKey))
+  const game = useRef<BreakerState>(carried.state)
+  /** What survives a run ending — the current game's score is in `game`. */
+  const tally = useRef({ best: carried.best, runs: carried.runs })
   const [hud, setHud] = useState<Hud>(snapshot(game.current))
+  /** Cleared on the first serve: it only labels the overlay you came back to. */
+  const [returning, setReturning] = useState(carried.carried)
+
+  const persist = useCallback(() => {
+    saveMemory(sessionKey, { state: game.current, ...tally.current })
+  }, [sessionKey])
 
   // The paddle is dragged, so the canvas must not also scroll or select; and a
   // tap anywhere on it serves the launch as well as the aim.
@@ -43,11 +64,21 @@ export function BrickBreaker({ remainingSec, onClose }: BrickBreakerProps) {
   /** Whatever the overlay's button says: launch, retry, or take the next level. */
   const advance = useCallback(() => {
     const s = game.current
-    if (s.status === 'ready') launch(s)
-    else if (s.status === 'level-clear') game.current = newGame(s.levelIndex + 1, { lives: s.lives, score: s.score })
-    else if (s.status === 'over' || s.status === 'complete') game.current = newGame(0)
+    if (s.status === 'ready') {
+      launch(s)
+      setReturning(false)
+    } else if (s.status === 'level-clear') {
+      game.current = newGame(s.levelIndex + 1, { lives: s.lives, score: s.score })
+    } else if (s.status === 'over' || s.status === 'complete') {
+      // The run is over, the session isn't: its score goes on the board before
+      // the next one starts back at zero.
+      const next = nextRun({ state: s, ...tally.current, carried: false })
+      tally.current = { best: next.best, runs: next.runs }
+      game.current = next.state
+    }
     setHud(snapshot(game.current))
-  }, [])
+    persist()
+  }, [persist])
 
   useEffect(() => {
     const el = canvasRef.current
@@ -82,6 +113,9 @@ export function BrickBreaker({ remainingSec, onClose }: BrickBreakerProps) {
       if (!sameHud(now, shown)) {
         shown = now
         setHud(now)
+        // Every brick moves the score, so this is also the save point: the run
+        // is never more than one hit behind whatever storage holds.
+        persist()
       }
       ctx.setTransform(scale, 0, 0, scale, 0, 0)
       draw(ctx, game.current, colors)
@@ -92,7 +126,21 @@ export function BrickBreaker({ remainingSec, onClose }: BrickBreakerProps) {
       cancelAnimationFrame(raf)
       ro.disconnect()
     }
-  }, [])
+  }, [persist])
+
+  // Closing the game is the ordinary way to leave it, but a locked phone or a
+  // killed tab is just as common mid-session — write the run on the way out of
+  // all three.
+  useEffect(() => {
+    const onHide = () => document.visibilityState === 'hidden' && persist()
+    document.addEventListener('visibilitychange', onHide)
+    window.addEventListener('pagehide', persist)
+    return () => {
+      document.removeEventListener('visibilitychange', onHide)
+      window.removeEventListener('pagehide', persist)
+      persist()
+    }
+  }, [persist])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -115,7 +163,9 @@ export function BrickBreaker({ remainingSec, onClose }: BrickBreakerProps) {
   const level = BREAKER_LEVELS[Math.min(hud.levelIndex, BREAKER_LEVELS.length - 1)]
   const mm = Math.floor(Math.max(0, remainingSec) / 60)
   const ss = Math.floor(Math.max(0, remainingSec) % 60)
-  const overlay = overlayFor(hud)
+  /** The session's high score, which the run in progress can already be. */
+  const best = Math.max(tally.current.best, hud.score)
+  const overlay = overlayFor(hud, { best, returning })
 
   return (
     <Overlay>
@@ -126,6 +176,7 @@ export function BrickBreaker({ remainingSec, onClose }: BrickBreakerProps) {
             <div className="bb-level">{level.name}</div>
             <div className="bb-meta num">
               LVL {hud.levelIndex + 1}/{BREAKER_LEVELS.length} · {hud.score}
+              {best > hud.score && ` · BEST ${best}`}
             </div>
           </div>
           <div className="bb-lives" aria-label={`${hud.lives} lives left`}>
@@ -175,19 +226,37 @@ function sameHud(a: Hud, b: Hud): boolean {
   return a.levelIndex === b.levelIndex && a.status === b.status && a.lives === b.lives && a.score === b.score
 }
 
+/** What the session remembers, for the lines that mention it. */
+interface Memory {
+  best: number
+  /** This rest opened onto a run that was already going. */
+  returning: boolean
+}
+
 /** The card over the field between balls. Nothing to say while it's live. */
-function overlayFor(hud: Hud): { title: string; sub: string; action: string } | null {
+function overlayFor(hud: Hud, mem: Memory): { title: string; sub: string; action: string } | null {
+  const beat = mem.best > hud.score ? ` · best ${mem.best}` : ''
   switch (hud.status) {
     case 'playing':
       return null
     case 'ready':
-      return hud.lives === 3
+      // Three different things a parked ball can mean: a fresh session, the set
+      // you came back to, and the one you just dropped.
+      if (mem.returning) {
+        const lives = `${hud.lives} ${hud.lives === 1 ? 'life' : 'lives'}`
+        return {
+          title: 'Where you left it',
+          sub: `Level ${hud.levelIndex + 1} · ${hud.score} points · ${lives}`,
+          action: 'Serve',
+        }
+      }
+      return hud.lives === LIVES
         ? { title: 'Brick breaker', sub: 'Drag to aim, tap to serve', action: 'Serve' }
         : { title: 'Ball down', sub: `${hud.lives} ${hud.lives === 1 ? 'life' : 'lives'} left`, action: 'Serve' }
     case 'level-clear':
       return { title: 'Level clear', sub: `${hud.score} points — next one's faster`, action: 'Next level' }
     case 'over':
-      return { title: 'Game over', sub: `${hud.score} points`, action: 'Again' }
+      return { title: 'Game over', sub: `${hud.score} points${beat}`, action: 'Again' }
     case 'complete':
       return { title: 'All levels clear', sub: `${hud.score} points. Go and lift something.`, action: 'Again' }
   }

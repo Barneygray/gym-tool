@@ -24,7 +24,7 @@ export const BALL_R = 4.5
 
 /** Steepest launch/bounce angle off the vertical — beyond this a rally stalls. */
 const MAX_BOUNCE = 1.05
-const LIVES = 3
+export const LIVES = 3
 
 export interface BreakerLevel {
   name: string
@@ -39,11 +39,15 @@ export interface BreakerLevel {
  * Five levels, and they get harder the way a session does: the ball speeds up,
  * the paddle narrows, and the bricks stop dying in one hit. Sized so a level is
  * winnable inside a normal rest — around 15–30 hits, not a hundred.
+ *
+ * Speeds run about a tenth quicker than they first shipped at: the opening
+ * level was slow enough to feel like waiting, which is the one thing the rest
+ * clock already has covered.
  */
 export const BREAKER_LEVELS: BreakerLevel[] = [
   {
     name: 'Warm-up set',
-    speed: 150,
+    speed: 165,
     paddleW: 76,
     rows: [
       '11111111',
@@ -52,7 +56,7 @@ export const BREAKER_LEVELS: BreakerLevel[] = [
   },
   {
     name: 'Pyramid',
-    speed: 168,
+    speed: 185,
     paddleW: 70,
     rows: [
       '.222222.',
@@ -62,7 +66,7 @@ export const BREAKER_LEVELS: BreakerLevel[] = [
   },
   {
     name: 'Drop set',
-    speed: 184,
+    speed: 202,
     paddleW: 64,
     rows: [
       '1.1.1.1.',
@@ -72,7 +76,7 @@ export const BREAKER_LEVELS: BreakerLevel[] = [
   },
   {
     name: 'Superset',
-    speed: 200,
+    speed: 220,
     paddleW: 58,
     rows: [
       '.111111.',
@@ -82,7 +86,7 @@ export const BREAKER_LEVELS: BreakerLevel[] = [
   },
   {
     name: 'To failure',
-    speed: 218,
+    speed: 240,
     paddleW: 52,
     rows: [
       '3.1111.3',
@@ -189,7 +193,7 @@ export function launch(s: BreakerState, rand: () => number = Math.random): void 
 
 /**
  * Move the run on by `dt` seconds. Broken into substeps no longer than the
- * ball's radius: at 218 units/sec a whole frame is a 3.6-unit hop, which is
+ * ball's radius: at 240 units/sec a whole frame is a 4-unit hop, which is
  * enough to pass clean through a 14-unit brick if the frame lands badly.
  */
 export function step(s: BreakerState, dt: number): void {
@@ -286,7 +290,7 @@ function loseBall(s: BreakerState): void {
 }
 
 /** Rest the ball on the paddle, stationary. */
-function park(s: BreakerState): void {
+export function park(s: BreakerState): void {
   s.ball.x = s.paddle.x
   s.ball.y = PADDLE_Y - BALL_R - 1
   s.ball.vx = 0
