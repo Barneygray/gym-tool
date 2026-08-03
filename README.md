@@ -33,7 +33,9 @@ tells you exactly what to lift next.
   app bumps the weight and you rebuild. RPE sharpens the jumps and is read across
   your last few sessions rather than one: an easy top-of-range run earns a double
   increment, a grind earns half of one, and untagged sessions get the plain
-  conservative increment.
+  conservative increment. Every set logged in a workout carries an RPE — it's
+  required, with the scale spelled out in reps-left-in-the-tank under the picker
+  — so the read is never half a picture.
 - **Mesocycle periodization** — opt into a training block (Setup → Progression → Training block)
   and the engine stops living session-to-session: accumulation weeks ramp your
   prescribed set count while the final week auto-schedules a planned deload
@@ -90,8 +92,11 @@ tells you exactly what to lift next.
   sessions on that lift in full: every set, the RPE you tagged, and the notes you
   left yourself. When a lift stalls, the suggestion's "swap to a variation" is a
   button, not just advice.
-- **Smart in-workout tools** — warm-up ramps for compounds, per-side plate math,
-  auto-starting rest timer with chime/vibration, per-set RPE and notes. The
+- **Smart in-workout tools** — warm-up ramps for compounds (bench, squat, rows:
+  empty bar then percentage rungs, built from the weight you've actually dialled
+  in, so a lift you've never done gets one the moment you name a target),
+  per-side plate math, auto-starting rest timer with chime/vibration, per-set RPE
+  and notes. The
   rest belongs to the session rather than one station, so it keeps counting
   while you walk to the next lift or add an exercise — naming where it came
   from once you've moved on. The timer holds a screen wake lock so the phone

@@ -148,6 +148,22 @@ describe('plates & warm-ups', () => {
     expect(ramp.map((r) => r.weight)).toEqual([20, 40, 60, 80])
   })
 
+  it('ramps to whatever weight you name, not just a suggested one', () => {
+    // First time on a lift the engine has no weight to offer, so the screen
+    // ramps to the one dialled into the stepper instead. Every rung has to stay
+    // under it — a "warm-up" at your working weight is just a working set.
+    const ramp = warmupRamp(bench, 60, DEFAULT_SETTINGS)
+    expect(ramp[0]).toEqual({ weight: 20, reps: 10, label: 'Empty bar' })
+    expect(ramp.every((r) => r.weight < 60)).toBe(true)
+    expect(ramp.map((r) => r.weight)).toEqual([...ramp.map((r) => r.weight)].sort((a, b) => a - b))
+  })
+
+  it('drops a rung that lands on top of the one below it', () => {
+    // 40% of 60 kg rounds to 22.5 — a 1.25 a side over the empty bar, a set
+    // that costs a minute and warms nothing.
+    expect(warmupRamp(bench, 60, DEFAULT_SETTINGS).map((r) => r.weight)).toEqual([20, 35, 47.5])
+  })
+
   it('skips ramps for isolation moves', () => {
     expect(warmupRamp(getExercise('lateral-raise'), 12, DEFAULT_SETTINGS)).toEqual([])
   })

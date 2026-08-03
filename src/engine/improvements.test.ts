@@ -8,7 +8,7 @@ import {
   weeklyPlan,
 } from './schedule'
 import { readinessEffect } from './readiness'
-import { recentAvgRpe, rpeMultiplier, suggestFor } from './progression'
+import { RPE_SCALE, recentAvgRpe, rpeMeaning, rpeMultiplier, suggestFor } from './progression'
 import { isStalled, madeProgress } from './stall'
 import { performancesOf } from './history'
 import { bodyweightAt } from './bodyweight'
@@ -143,6 +143,25 @@ describe('RPE-scaled progression', () => {
     expect(rpeMultiplier(7.5)).toBe(1.5)
     expect(rpeMultiplier(8.5)).toBe(1)
     expect(rpeMultiplier(9.5)).toBe(0.5)
+  })
+
+  it('anchors every rung of the scale to reps in reserve', () => {
+    // The picker is required now, so the scale has to be readable without
+    // knowing what RPE is — every rung the UI offers gets a plain-words meaning.
+    expect([...RPE_SCALE]).toEqual([6, 7, 8, 9, 10])
+    for (const r of RPE_SCALE) expect(rpeMeaning(r)).toMatch(/\w/)
+    expect(rpeMeaning(6)).toMatch(/four or more/)
+    expect(rpeMeaning(8)).toMatch(/two reps left/)
+    expect(rpeMeaning(10)).toMatch(/nothing left/)
+  })
+
+  it('says the same thing the maths does', () => {
+    // The rung explained as "two reps left" is the one that earns a middling
+    // jump; drift between the wording and the thresholds would make the
+    // explainer a lie.
+    expect(rpeMultiplier(6)).toBe(2)
+    expect(rpeMultiplier(8)).toBe(1.5)
+    expect(rpeMultiplier(10)).toBe(0.5)
   })
 
   it('averages RPE across recent sessions, ignoring untagged sets', () => {
