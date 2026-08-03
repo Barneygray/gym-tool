@@ -14,9 +14,13 @@ interface RestTimerProps {
   partner?: { label: string; onGo: () => void }
   /** Name of the station the rest came from, once you've moved on from it. */
   fromLabel?: string
+  /** The workout these rests belong to — the game remembers its run across it. */
+  sessionKey: string
 }
 
-export function RestTimer({ startedAt, durationSec, soundOn, onDismiss, partner, fromLabel }: RestTimerProps) {
+export function RestTimer({
+  startedAt, durationSec, soundOn, onDismiss, partner, fromLabel, sessionKey,
+}: RestTimerProps) {
   const [now, setNow] = useState(Date.now())
   const [playing, setPlaying] = useState(false)
   const beeped = useRef(false)
@@ -77,7 +81,7 @@ export function RestTimer({ startedAt, durationSec, soundOn, onDismiss, partner,
   return (
     <>
       {playing && !done && (
-        <BrickBreaker remainingSec={remaining} onClose={() => setPlaying(false)} />
+        <BrickBreaker remainingSec={remaining} sessionKey={sessionKey} onClose={() => setPlaying(false)} />
       )}
       <Overlay>
         <div className={`rest-timer${done ? ' done' : ''}`}>
