@@ -6,7 +6,7 @@ import {
 } from '../data/exercises'
 import { dayById } from '../data/days'
 import { swapOptions } from '../engine/rotation'
-import { suggestFor } from '../engine/progression'
+import { RPE_SCALE, rpeMeaning, suggestFor } from '../engine/progression'
 import { phaseFor } from '../engine/mesocycle'
 import { warmupRamp } from '../engine/warmup'
 import { platesPerSide } from '../engine/plates'
@@ -169,9 +169,14 @@ function ActiveSession({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [exercise.id])
 
+  // The ramp is built from the weight actually dialled in, not the engine's
+  // frozen suggestion. Talk yourself up or down from the target and the rungs
+  // follow — and a lift you've never done, where the engine has no weight to
+  // offer, still gets a ramp the moment you name one.
+  const rampTo = weight > 0 ? weight : suggestion.weight
   const warmups = useMemo(
-    () => (loggedSets.length === 0 && suggestion.kind !== 'start' ? warmupRamp(exercise, suggestion.weight, settings) : []),
-    [exercise, suggestion, settings, loggedSets.length],
+    () => (loggedSets.length === 0 ? warmupRamp(exercise, rampTo, settings) : []),
+    [exercise, rampTo, settings, loggedSets.length],
   )
 
   const plates = exercise.barLoaded && weight > 0
@@ -181,8 +186,11 @@ function ActiveSession({
   const writeSets = (sets: SetLog[]) => setActive({ ...active, logged: { ...active.logged, [exercise.id]: sets } })
 
   const commitSet = () => {
-    const set: SetLog = { weight, reps }
-    if (rpe !== undefined) set.rpe = rpe
+    // RPE is part of a set, not a garnish on one: the engine sizes every jump
+    // from it, and a log where only the memorable sets got tagged reads as
+    // easier than the training was.
+    if (rpe === undefined || reps <= 0) return
+    const set: SetLog = { weight, reps, rpe }
     if (note.trim()) set.note = note.trim()
 
     if (editingIndex !== null) {
@@ -443,6 +451,9 @@ function ActiveSession({
               <span>{formatNum(w.weight)} kg × {w.reps}</span>
             </div>
           ))}
+          <p className="warmup-note">
+            Ramp to your {formatNum(rampTo)} kg working set — one set each, short rests, none of it logged.
+          </p>
         </div>
       )}
 
@@ -465,17 +476,27 @@ function ActiveSession({
       )}
 
       {/* One "RPE" label, five numbers — the word used to be stamped on all
-          five buttons, so half of each 60px target was the same three chars. */}
-      <div className="rpe-row">
-        <span className="label" aria-hidden="true">RPE</span>
-        <div className="rpe-picker" role="group" aria-label="Rate of perceived exertion">
-          {[6, 7, 8, 9, 10].map((r) => (
-            <button key={r} className={rpe === r ? 'on' : ''} aria-pressed={rpe === r}
-              aria-label={`RPE ${r}`} onClick={() => setRpe(rpe === r ? undefined : r)}>
-              {r}
-            </button>
-          ))}
+          five buttons, so half of each 60px target was the same three chars.
+          Required, so there's no un-picking a rung: the only way out is to
+          choose a different one. */}
+      <div className="rpe-field">
+        <div className="rpe-row">
+          <span className="label" aria-hidden="true">RPE</span>
+          <div className="rpe-picker" role="group" aria-label="Rate of perceived exertion"
+            aria-describedby="rpe-hint">
+            {RPE_SCALE.map((r) => (
+              <button key={r} className={rpe === r ? 'on' : ''} aria-pressed={rpe === r}
+                aria-label={`RPE ${r} — ${rpeMeaning(r)}`} onClick={() => setRpe(r)}>
+                {r}
+              </button>
+            ))}
+          </div>
         </div>
+        <p className={`rpe-hint${rpe === undefined ? ' ask' : ''}`} id="rpe-hint" aria-live="polite">
+          {rpe === undefined
+            ? 'How hard was that set? Required — 6 is easy, 10 is nothing left, and it sizes your next jump.'
+            : <><b className="num">{rpe}</b> · {rpeMeaning(rpe)}</>}
+        </p>
       </div>
 
       {showNote ? (
@@ -492,7 +513,7 @@ function ActiveSession({
         </button>
       )}
 
-      <button className="btn-primary" onClick={commitSet} disabled={reps <= 0}>
+      <button className="btn-primary" onClick={commitSet} disabled={reps <= 0 || rpe === undefined}>
         {editingIndex !== null ? `Update set ${editingIndex + 1}` : `Log set ${loggedSets.length + 1}`}
       </button>
       {editingIndex !== null && (

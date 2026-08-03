@@ -1546,8 +1546,17 @@ input[type='number'] {
   font-size: 13px;
   border-bottom: 1px solid var(--line);
 }
-.warmup-list .w-row:last-child {
+/* The note is the card's last child now, so the rule can't lean on :last-child
+   to strip the trailing rule off the bottom row. */
+.warmup-list .w-row:last-of-type {
   border-bottom: none;
+}
+.warmup-note {
+  margin: var(--s2) 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-faint);
+  max-width: 40ch;
 }
 
 /* ── Steppers ───────────────────────────────────────────── */
@@ -1636,11 +1645,29 @@ input[type='number'] {
 }
 
 /* ── RPE ────────────────────────────────────────────────── */
+.rpe-field {
+  margin-bottom: var(--s5);
+}
 .rpe-row {
   display: flex;
   align-items: stretch;
   gap: var(--s3);
-  margin-bottom: var(--s5);
+}
+/* Sits under the picker, so the scale means one thing every week rather than
+   whatever "hard" felt like that day. */
+.rpe-hint {
+  margin: var(--s2) 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-dim);
+  max-width: 40ch;
+}
+.rpe-hint.ask {
+  color: var(--text-faint);
+}
+.rpe-hint b {
+  color: var(--ember);
+  font-weight: 680;
 }
 .rpe-row > .label {
   display: flex;

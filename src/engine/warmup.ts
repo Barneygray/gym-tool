@@ -1,6 +1,9 @@
 import type { Exercise, Settings } from '../types'
 import { roundToLoadable, roundToStep } from './plates'
 
+/** Smallest jump (kg) between barbell rungs worth loading plates for. */
+const MIN_RUNG_GAP = 5
+
 export interface WarmupSet {
   weight: number
   reps: number
@@ -30,7 +33,13 @@ export function warmupRamp(
     const pcts: [number, number][] = [[0.4, 8], [0.6, 5], [0.8, 3]]
     for (const [pct, reps] of pcts) {
       const w = round(workingWeight * pct)
-      if (w > bar && w < workingWeight) ramp.push({ weight: w, reps, label: `${Math.round(pct * 100)}%` })
+      // A rung has to be worth walking to the rack for. On a light working
+      // weight the 40% rung lands a plate-change above the empty bar — a set
+      // that costs a minute and warms nothing — so drop rungs that don't clear
+      // the one below by a real jump.
+      if (w >= ramp[ramp.length - 1].weight + MIN_RUNG_GAP && w < workingWeight) {
+        ramp.push({ weight: w, reps, label: `${Math.round(pct * 100)}%` })
+      }
     }
     return ramp
   }

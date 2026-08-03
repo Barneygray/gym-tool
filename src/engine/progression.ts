@@ -152,6 +152,27 @@ export function recentAvgRpe(perfs: Performance[], window = RPE_WINDOW): number 
   return rpes.reduce((a, b) => a + b, 0) / rpes.length
 }
 
+/** The rungs of the scale the app asks for, easiest first. */
+export const RPE_SCALE = [6, 7, 8, 9, 10] as const
+
+/**
+ * What each rung means, in reps left in the tank.
+ *
+ * The number only sharpens the jumps if it means the same thing every week, and
+ * "how hard was that, 6 to 10?" is not a question anyone answers the same way
+ * twice unaided. Reps-in-reserve is the anchor that makes it repeatable, so it
+ * sits under the picker rather than in a help page nobody opens. The thresholds
+ * deliberately match `rpeMultiplier` — what you're told a 7 means is what a 7
+ * does to your next target.
+ */
+export function rpeMeaning(rpe: number): string {
+  if (rpe <= 6) return 'easy — four or more reps left in the tank'
+  if (rpe <= 7) return 'comfortable — about three reps left'
+  if (rpe <= 8) return 'hard but clean — two reps left'
+  if (rpe <= 9) return 'one rep left, at most'
+  return 'all out — nothing left, form on the edge'
+}
+
 /**
  * How many increments to add once the rep range is topped, as a function of how
  * hard recent sets felt. Untagged sessions get the plain single increment — the
