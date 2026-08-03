@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { Session } from '../types'
 import {
-  cooldownEntries, cooldownPhases, cooldownSessionKind, formatDuration, trackName, type CooldownPlan,
+  TRANSITION_SEC, cooldownEntries, cooldownPhases, cooldownSessionKind, formatDuration, trackName,
+  type CooldownPlan,
 } from '../engine/cooldown'
 import { saveSession } from '../db/db'
 import { pushSession } from '../db/sync'
@@ -26,10 +27,16 @@ interface CooldownProps {
  */
 export function CooldownScreen({ plan, soundOn, onLogged, onDone }: CooldownProps) {
   const phases = useMemo(() => cooldownPhases(plan.items), [plan])
-  const startedAt = useRef(Date.now()).current
 
   const [index, setIndex] = useState(0)
-  const [endsAt, setEndsAt] = useState(() => Date.now() + (phases[0]?.sec ?? 0) * 1000)
+  /**
+   * When Begin was pressed, and the session's start time with it; null until
+   * then. The block used to open with its clock already running, so the first
+   * movement was a third gone by the time you'd put the phone down and got on
+   * the mat — the countdown now waits for you.
+   */
+  const [startedAt, setStartedAt] = useState<number | null>(null)
+  const [endsAt, setEndsAt] = useState(0)
   /** Milliseconds left on the current phase while paused; null = running. */
   const [pausedLeft, setPausedLeft] = useState<number | null>(null)
   const [done, setDone] = useState<Set<number>>(new Set())
@@ -37,15 +44,24 @@ export function CooldownScreen({ plan, soundOn, onLogged, onDone }: CooldownProp
   const [saving, setSaving] = useState(false)
   const [now, setNow] = useState(Date.now())
 
+  const ready = startedAt === null
+
   // Holds are 30–45 seconds of not touching the phone; the screen must not
-  // sleep in the middle of one.
-  useWakeLock(!finished)
+  // sleep in the middle of one. Nothing to keep awake before Begin.
+  useWakeLock(!ready && !finished)
 
   useEffect(() => {
-    if (finished || pausedLeft !== null) return
+    if (ready || finished || pausedLeft !== null) return
     const t = setInterval(() => setNow(Date.now()), 200)
     return () => clearInterval(t)
-  }, [finished, pausedLeft])
+  }, [ready, finished, pausedLeft])
+
+  const begin = () => {
+    const t = Date.now()
+    setNow(t)
+    setStartedAt(t)
+    setEndsAt(t + (phases[0]?.sec ?? 0) * 1000)
+  }
 
   /**
    * Move to `to`. Leaving a movement counts it as done unless it was skipped —
@@ -72,10 +88,10 @@ export function CooldownScreen({ plan, soundOn, onLogged, onDone }: CooldownProp
   // The clock, not a tick count, decides when a phase is over — a backgrounded
   // tab stops firing intervals, and coming back should land where it should.
   useEffect(() => {
-    if (finished || phases.length === 0 || pausedLeft !== null || now < endsAt) return
+    if (ready || finished || phases.length === 0 || pausedLeft !== null || now < endsAt) return
     advance(index + 1, true, phases[index].kind === 'work')
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [now, endsAt, finished, pausedLeft, index])
+  }, [now, endsAt, ready, finished, pausedLeft, index])
 
   if (finished || phases.length === 0) {
     return (
@@ -88,7 +104,7 @@ export function CooldownScreen({ plan, soundOn, onLogged, onDone }: CooldownProp
           const session: Session = {
             uuid: crypto.randomUUID(),
             dayType: cooldownSessionKind(plan.track),
-            startedAt,
+            startedAt: startedAt ?? Date.now(),
             finishedAt: Date.now(),
             entries: cooldownEntries(items),
           }
@@ -105,7 +121,7 @@ export function CooldownScreen({ plan, soundOn, onLogged, onDone }: CooldownProp
   const item = plan.items[phase.itemIndex]
   const leftMs = pausedLeft ?? Math.max(0, endsAt - now)
   const secs = Math.ceil(leftMs / 1000)
-  const frac = phase.sec > 0 ? Math.min(1, 1 - leftMs / (phase.sec * 1000)) : 1
+  const frac = ready ? 0 : phase.sec > 0 ? Math.min(1, 1 - leftMs / (phase.sec * 1000)) : 1
   const R = 54
   const C = 2 * Math.PI * R
 
@@ -136,11 +152,11 @@ export function CooldownScreen({ plan, soundOn, onLogged, onDone }: CooldownProp
         ))}
       </div>
 
-      <div className={`cool-stage ${phase.kind}`}>
+      <div className={`cool-stage ${ready ? 'ready' : phase.kind}`}>
         {/* Announced, because the screen is the instruction: without this a
             screen-reader user hears nothing when a hold switches sides. */}
         <div className="cool-phase" aria-live="polite">
-          {pausedLeft !== null ? 'Paused' : phase.label}
+          {ready ? 'Up first' : pausedLeft !== null ? 'Paused' : phase.label}
         </div>
         <div className="cool-ring">
           <svg width="132" height="132" viewBox="0 0 132 132" aria-hidden="true">
@@ -155,7 +171,11 @@ export function CooldownScreen({ plan, soundOn, onLogged, onDone }: CooldownProp
               style={{ transition: 'stroke-dashoffset 0.2s linear' }}
             />
           </svg>
-          <div className="cool-count num" role="timer" aria-live="off">{secs}</div>
+          {/* Before Begin there's nothing to count down, so the ring holds
+              what the block is going to cost you instead. */}
+          {ready
+            ? <div className="cool-count num">{formatDuration(plan.totalSec)}</div>
+            : <div className="cool-count num" role="timer" aria-live="off">{secs}</div>}
         </div>
 
         <h1 className="cool-name">{item.name}</h1>
@@ -166,20 +186,31 @@ export function CooldownScreen({ plan, soundOn, onLogged, onDone }: CooldownProp
         <p className="cool-cue">{item.cue}</p>
       </div>
 
-      <div className="cool-controls">
-        <button className="btn-ghost"
-          onClick={() => (pausedLeft === null
-            ? setPausedLeft(Math.max(0, endsAt - Date.now()))
-            : (setEndsAt(Date.now() + pausedLeft), setPausedLeft(null)))}>
-          {pausedLeft === null ? 'Pause' : 'Resume'}
-        </button>
-        <button className="btn-primary" onClick={() => advance(index + 1, true, false)}>
-          {index === phases.length - 1 ? 'Finish' : 'Next'}
-        </button>
-      </div>
-      <button className="btn-small" style={{ marginTop: 'var(--s3)' }} onClick={skipMovement}>
-        Skip {item.name}
-      </button>
+      {ready ? (
+        <>
+          <button className="btn-primary" onClick={begin}>Begin</button>
+          <p className="cool-begin-note">
+            {TRANSITION_SEC} seconds to get into position, then the block runs itself.
+          </p>
+        </>
+      ) : (
+        <>
+          <div className="cool-controls">
+            <button className="btn-ghost"
+              onClick={() => (pausedLeft === null
+                ? setPausedLeft(Math.max(0, endsAt - Date.now()))
+                : (setEndsAt(Date.now() + pausedLeft), setPausedLeft(null)))}>
+              {pausedLeft === null ? 'Pause' : 'Resume'}
+            </button>
+            <button className="btn-primary" onClick={() => advance(index + 1, true, false)}>
+              {index === phases.length - 1 ? 'Finish' : 'Next'}
+            </button>
+          </div>
+          <button className="btn-small" style={{ marginTop: 'var(--s3)' }} onClick={skipMovement}>
+            Skip {item.name}
+          </button>
+        </>
+      )}
 
       <div className="section-label">
         <span>The block</span>
