@@ -31,11 +31,16 @@ tells you exactly what to lift next.
 - **Progressive overload engine (double progression)** — each exercise has a rep
   range; you add reps at a fixed weight until every set tops the range, then the
   app bumps the weight and you rebuild. RPE sharpens the jumps and is read across
-  your last few sessions rather than one: an easy top-of-range run earns a double
-  increment, a grind earns half of one, and untagged sessions get the plain
-  conservative increment. Every set logged in a workout carries an RPE — it's
-  required, with the scale spelled out in reps-left-in-the-tank under the picker
-  — so the read is never half a picture.
+  your last few sessions rather than one, on a smooth ramp with no thresholds to
+  straddle: a settled easy top-of-range run earns a double increment, a grind
+  earns half of one. How far the jump travels from the plain increment depends on
+  how much the read is worth — a single tagged set, or tags that disagree with
+  each other, get scaled back toward the conservative default, and the suggestion
+  says when it's hedging. Every set answers the RPE question, with the scale
+  spelled out in reps-left-in-the-tank under the picker, and **"not sure" is one
+  of the answers**: it logs the set with no reading rather than a number you
+  didn't mean, because a required field with no honest way out collects taps, not
+  data.
 - **Mesocycle periodization** — opt into a training block (Setup → Progression → Training block)
   and the engine stops living session-to-session: accumulation weeks ramp your
   prescribed set count while the final week auto-schedules a planned deload

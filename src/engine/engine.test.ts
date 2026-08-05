@@ -40,12 +40,26 @@ describe('progression (double progression)', () => {
     expect(s.targetReps).toBe(5)
   })
 
-  it('doubles the jump when topping the range felt easy (avg RPE ≤ 7)', () => {
+  it('doubles the jump when a settled read says topping the range was easy', () => {
+    // Six consistent tags is a full-confidence read, so RPE 7 pays out the
+    // double increment the scale promises: 80 + 2 × 2.5.
+    const easy: SetLog[] = [
+      { weight: 80, reps: 8, rpe: 7 }, { weight: 80, reps: 8, rpe: 7 }, { weight: 80, reps: 8, rpe: 7 },
+    ]
+    const history = [session('push', 'bench-press', easy), session('push', 'bench-press', easy)]
+    expect(suggestFor(bench, history, DEFAULT_SETTINGS).weight).toBe(85)
+  })
+
+  it('hedges the same jump when only one session backs it', () => {
+    // Same "it felt easy" reading, a third of the evidence. The jump still
+    // goes up, just not by the full double.
     const history = [session('push', 'bench-press', [
       { weight: 80, reps: 8, rpe: 6 }, { weight: 80, reps: 8, rpe: 7 }, { weight: 80, reps: 8, rpe: 7 },
     ])]
     const s = suggestFor(bench, history, DEFAULT_SETTINGS)
-    expect(s.weight).toBe(85)
+    expect(s.weight).toBeGreaterThan(80)
+    expect(s.weight).toBeLessThan(85)
+    expect(s.reason).toMatch(/hedged/)
   })
 
   it('holds the weight and targets one more rep otherwise', () => {
