@@ -58,25 +58,64 @@ create table if not exists settings (
 alter table settings add column if not exists payload jsonb;
 alter table settings add column if not exists updated_ms bigint;
 
+-- ── Access control ──────────────────────────────────────
+--
 -- The app talks to these with the public anon key and no login, so the anon
--- role needs read/write. Protection is the `owner` value itself: new installs
--- generate a random key and address a bucket derived from sha256(key), so the
--- bucket name is not guessable and never ships in the bundle. The key is only
--- ever hashed client-side — the server never sees it. Installs predating this
--- stay on the shared `forge-owner` bucket until they opt in (Setup → Cloud
--- Backup), because re-keying them silently would orphan their history.
+-- role is the only role there is. What scopes a request to one trainee is the
+-- `owner` value: new installs generate a random key and address a bucket
+-- derived from sha256(key), so the bucket name is not guessable and never
+-- ships in the bundle. The key is only ever hashed client-side — the server
+-- never sees it. Installs predating this stay on the shared `forge-owner`
+-- bucket until they opt in (Setup → Backup & data), because re-keying them
+-- silently would orphan their history.
+--
+-- These policies used to be `using (true)`, which left that scoping entirely to
+-- the client: every query the app sends carries `owner = eq.<bucket>`, but
+-- nothing made it. The URL and anon key ship in the published bundle, so anyone
+-- who opened the app could issue their own PostgREST request *without* that
+-- filter and read every bucket at once — the sha256 bucket name protected
+-- nothing, since `select owner from sessions` handed the list over. The same
+-- hole let one unfiltered `delete` take out everybody's history.
+--
+-- The request must now name its bucket in an `x-forge-owner` header, and rows
+-- are visible only where `owner` equals it. A request that names no bucket
+-- matches no rows; one that names a bucket sees exactly that bucket. The header
+-- carries the already-hashed owner — the same value the client puts in the
+-- query string today — so this reveals nothing new to the network, it just
+-- stops the server from answering questions nobody was entitled to ask.
+--
+-- NOTE ON UPGRADING: a device running a bundle older than this change sends no
+-- header, so its sync stops working (visibly — failures surface in Setup) until
+-- the service worker picks up the new build. Nothing is lost in the meantime;
+-- the device keeps its full local copy and reconciles on the next successful
+-- sync.
 alter table sessions enable row level security;
 alter table records enable row level security;
 alter table settings enable row level security;
 
+-- The bucket this request claims, or null when it claims none.
+create or replace function forge_request_owner() returns text
+language sql stable as $$
+  select nullif(current_setting('request.headers', true)::json ->> 'x-forge-owner', '')
+$$;
+
 drop policy if exists "anon full access to sessions" on sessions;
-create policy "anon full access to sessions" on sessions
-  for all to anon using (true) with check (true);
+drop policy if exists "own bucket only on sessions" on sessions;
+create policy "own bucket only on sessions" on sessions
+  for all to anon
+  using (owner = forge_request_owner())
+  with check (owner = forge_request_owner());
 
 drop policy if exists "anon full access to records" on records;
-create policy "anon full access to records" on records
-  for all to anon using (true) with check (true);
+drop policy if exists "own bucket only on records" on records;
+create policy "own bucket only on records" on records
+  for all to anon
+  using (owner = forge_request_owner())
+  with check (owner = forge_request_owner());
 
 drop policy if exists "anon full access to settings" on settings;
-create policy "anon full access to settings" on settings
-  for all to anon using (true) with check (true);
+drop policy if exists "own bucket only on settings" on settings;
+create policy "own bucket only on settings" on settings
+  for all to anon
+  using (owner = forge_request_owner())
+  with check (owner = forge_request_owner());
