@@ -84,7 +84,7 @@ export function rotationStart(history: Session[], split: DayId[], before = Infin
     .filter((s) => s.startedAt < before)
     .sort((a, b) => b.startedAt - a.startedAt)
   for (const session of sorted) {
-    const idx = split.indexOf(session.dayType as DayId)
+    const idx = split.indexOf(session.dayType)
     if (idx >= 0) return (idx + 1) % split.length
   }
   return 0

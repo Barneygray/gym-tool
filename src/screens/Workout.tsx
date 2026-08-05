@@ -376,7 +376,9 @@ function ActiveSession({
       <h1 className="sheet-title">{exercise.name}</h1>
       <p className="sheet-sub" style={{ marginBottom: 'var(--s4)' }}>{exercise.cue}</p>
 
-      <div className="station-actions">
+      {/* Named as a group: "Swap" and "Skip" are also what you do to a rest
+          timer, and out of context there's no telling which one you're on. */}
+      <div className="station-actions" role="group" aria-label="Station controls">
         <button className="btn-small" onClick={() => setPicking(picking === 'add' ? null : 'add')}>
           + Add exercise
         </button>

@@ -145,7 +145,7 @@ async function syncSessions(supabase: Client, owner: string): Promise<void> {
     if (error) throw new Error(error.message)
     const pulled: Session[] = (rows ?? []).map((r: SessionRow) => ({
       uuid: r.uuid,
-      dayType: r.day_type as Session['dayType'],
+      dayType: r.day_type,
       startedAt: r.started_at,
       finishedAt: r.finished_at ?? undefined,
       entries: r.entries,

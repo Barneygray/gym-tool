@@ -175,7 +175,7 @@ export function DataPage({ onChanged, onBack, syncing, onSyncNow, syncError }: {
           <input ref={fileRef} type="file" accept="application/json" hidden
             onChange={(e) => {
               const f = e.target.files?.[0]
-              if (f) doImport(f)
+              if (f) void doImport(f)
               e.target.value = ''
             }} />
         </div>
