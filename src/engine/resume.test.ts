@@ -1,7 +1,10 @@
 import { describe, it, expect } from 'vitest'
 import type { Session, SessionEntry } from '../types'
 import { MOBILITY } from '../types'
-import { finishedAgoLabel, resumableSession, resumeWorkout, withoutSession } from './resume'
+import type { ActiveWorkout } from '../App'
+import {
+  draftSession, finishedAgoLabel, resumableSession, resumeWorkout, startedAgoLabel, withoutSession,
+} from './resume'
 
 const MIN = 60_000
 const HOUR = 60 * MIN
@@ -117,5 +120,53 @@ describe('how long ago it was logged', () => {
       .toBe('1 hr ago')
     expect(finishedAgoLabel(session({ startedAt: NOW - 5 * HOUR, finishedAt: NOW - 4 * HOUR }), NOW))
       .toBe('4 hrs ago')
+  })
+})
+
+describe('the row a live session is saved as', () => {
+  const active: ActiveWorkout = {
+    dayType: 'push',
+    startedAt: NOW - HOUR,
+    exerciseIds: ['bench-press', 'overhead-press', 'triceps-pushdown'],
+    logged: {
+      'bench-press': [{ weight: 80, reps: 5, rpe: 8 }],
+      'overhead-press': [],
+    },
+    currentIndex: 1,
+    readiness: 'beat',
+    sessionUuid: 'live-1',
+  }
+
+  it('carries the identity and start of the session being logged', () => {
+    const s = draftSession(active, 'home-rack')
+    expect(s.uuid).toBe('live-1')
+    expect(s.startedAt).toBe(NOW - HOUR)
+    expect(s.readiness).toBe('beat')
+    expect(s.profileId).toBe('home-rack')
+  })
+
+  // Unfinished is what keeps it out of `getHistory`, and so out of every
+  // suggestion, PR and freshness reading until it's actually done.
+  it('is unfinished', () => {
+    expect(draftSession(active).finishedAt).toBeUndefined()
+  })
+
+  it('holds only stations with sets against them', () => {
+    expect(draftSession(active).entries.map((e) => e.exerciseId)).toEqual(['bench-press'])
+  })
+
+  it('round-trips back into the workout it came from', () => {
+    const reopened = resumeWorkout(draftSession(active))
+    expect(reopened.sessionUuid).toBe('live-1')
+    expect(reopened.startedAt).toBe(active.startedAt)
+    expect(reopened.logged['bench-press']).toEqual(active.logged['bench-press'])
+    expect(reopened.readiness).toBe('beat')
+  })
+})
+
+describe('how long a session has been running', () => {
+  it('reads from when it started, not when it was written', () => {
+    expect(startedAgoLabel(session({ startedAt: NOW - 40 * MIN }), NOW)).toBe('40 min ago')
+    expect(startedAgoLabel(session({ startedAt: NOW - 2 * HOUR }), NOW)).toBe('2 hrs ago')
   })
 })

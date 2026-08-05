@@ -57,7 +57,29 @@ export default defineConfig(({ mode }) => ({
       },
     },
   },
+  // Two suites, because they need two environments. The engine is pure
+  // functions over sessions and settings and has no business paying for a DOM;
+  // the screens are the half of this app that had no tests at all, and they
+  // need one. Splitting them keeps `npm test` a single command.
   test: {
-    environment: 'node',
+    projects: [
+      {
+        extends: true,
+        test: {
+          name: 'engine',
+          environment: 'node',
+          include: ['src/**/*.test.ts'],
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: 'ui',
+          environment: 'jsdom',
+          include: ['src/**/*.test.tsx'],
+          setupFiles: ['src/test/setup.ts'],
+        },
+      },
+    ],
   },
 }))

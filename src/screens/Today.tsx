@@ -17,7 +17,7 @@ import { groupNames } from '../engine/mobility'
 import { saveSettings } from '../db/db'
 import { pushSettings } from '../db/sync'
 import { lastSessionOf } from '../engine/history'
-import { finishedAgoLabel, resumableSession, resumeWorkout } from '../engine/resume'
+import { finishedAgoLabel, resumableSession, resumeWorkout, startedAgoLabel } from '../engine/resume'
 import { recoveryByMuscle, daysSince } from '../engine/stats'
 import { AlertIcon, ChevronIcon, CloseIcon, HistoryIcon, LinkIcon, SwapIcon } from '../components/Icons'
 import { ExercisePicker } from '../components/ExercisePicker'
@@ -40,11 +40,13 @@ interface TodayProps {
   history: Session[]
   settings: Settings
   bodyLog: BodyLog[]
+  /** A session still in progress — this device's or another's — if there is one. */
+  draft: Session | null
   startWorkout: (w: ActiveWorkout) => void
   onChanged: () => Promise<void>
 }
 
-export function TodayScreen({ history, settings, bodyLog, startWorkout, onChanged }: TodayProps) {
+export function TodayScreen({ history, settings, bodyLog, draft, startWorkout, onChanged }: TodayProps) {
   const [previewDay, setPreviewDay] = useState<DayId | null>(null)
   const now = Date.now()
   const recovery = useMemo(() => recoveryByMuscle(history, now), [history, now])
@@ -81,7 +83,17 @@ export function TodayScreen({ history, settings, bodyLog, startWorkout, onChange
         <div className="block-note">{phase.note}</div>
       </div>}
 
-      {resumable && (
+      {/* An unfinished session outranks a finished one: it's the workout you're
+          still in the middle of, recovered from whatever ended the last screen
+          it was on — a dead battery, a closed tab, or another phone entirely. */}
+      {draft ? (
+        <ResumeCard
+          session={draft}
+          now={now}
+          live
+          onResume={() => startWorkout(resumeWorkout(draft))}
+        />
+      ) : resumable && (
         <ResumeCard
           session={resumable}
           now={now}
@@ -253,20 +265,26 @@ const sessionName = (dayType: Session['dayType']) =>
  * an interrupted workout doesn't read in the log as two short ones an hour
  * apart, with the second one's suggestions built on the first.
  */
-function ResumeCard({ session, now, onResume }: {
+function ResumeCard({ session, now, live = false, onResume }: {
   session: Session
   now: number
+  /** The session was never finished — it's still running, not being reopened. */
+  live?: boolean
   onResume: () => void
 }) {
   const exercises = session.entries.length
   const sets = session.entries.reduce((t, e) => t + e.sets.length, 0)
 
   return (
-    <div className="resume-card">
+    <div className={`resume-card${live ? ' live' : ''}`}>
       <div style={{ minWidth: 0 }}>
         <div className="resume-kind">
           <HistoryIcon size={13} />
-          <span>Logged {finishedAgoLabel(session, now)}</span>
+          <span>
+            {live
+              ? `In progress · started ${startedAgoLabel(session, now)}`
+              : `Logged ${finishedAgoLabel(session, now)}`}
+          </span>
         </div>
         <div className="resume-day">{sessionName(session.dayType)}</div>
         {/* The button says what happens; this only has to say what's there to

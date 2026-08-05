@@ -5,7 +5,7 @@ import { DESK_RESCUE, STRETCH_GROUPS, groupIdOfStretch } from '../data/stretches
 import { CONDITIONING } from '../data/conditioning'
 import {
   COOLDOWN_MINUTES, COOLDOWN_TRACKS, buildCooldown, cooldownEntries, cooldownPhases,
-  cooldownSessionKind, formatDuration, schemeCost, type CooldownMinutes, type CooldownTrack,
+  cooldownSessionKind, formatDuration, schemeCost, type CooldownMinutes,
 } from './cooldown'
 
 const DAY = 86_400_000
@@ -271,7 +271,7 @@ describe('a stale history doesn’t break the builder', () => {
       mobility(['couch-quad', 'not-a-stretch'], NOW - 400 * DAY),
       conditioning(['plank', 'not-a-move'], NOW - 400 * DAY),
     ]
-    for (const track of TRACKS as CooldownTrack[]) {
+    for (const track of TRACKS) {
       for (const minutes of COOLDOWN_MINUTES as readonly CooldownMinutes[]) {
         const plan = buildCooldown(track, minutes, { muscles: ['core'], history, now: NOW })
         expect(plan.items.length).toBeGreaterThan(0)

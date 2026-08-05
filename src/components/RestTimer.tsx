@@ -84,7 +84,7 @@ export function RestTimer({
         <BrickBreaker remainingSec={remaining} sessionKey={sessionKey} onClose={() => setPlaying(false)} />
       )}
       <Overlay>
-        <div className={`rest-timer${done ? ' done' : ''}`}>
+        <div className={`rest-timer${done ? ' done' : ''}`} role="timer" aria-label="Rest timer">
           <svg className="ring" width="40" height="40" viewBox="0 0 40 40">
             <circle cx="20" cy="20" r={R} stroke="var(--line-strong)" strokeWidth="3.5" fill="none" />
             <circle

@@ -130,7 +130,7 @@ export function recommendDay(
     headline: fresh
       ? 'Start here'
       : planDone
-        ? `${planned!.name} done — ${best.name} if you're training again`
+        ? `${planned.name} done — ${best.name} if you're training again`
         : hasPlan
           ? `Rest day — ${best.name} if you're training anyway`
           : `${best.name} is your freshest option`,

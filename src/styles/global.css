@@ -878,6 +878,17 @@ input[type='number'] {
 .resume-card .btn-small {
   flex-shrink: 0;
 }
+/* A session that never finished is the exception to the quietness above: it
+   isn't an offer to undo something, it's work still on the clock — so it takes
+   the ember rather than sitting back in the neutral ramp. */
+.resume-card.live {
+  border-color: var(--ember-line);
+  border-left-color: var(--ember);
+  background: var(--ember-soft);
+}
+.resume-card.live .resume-kind {
+  color: var(--ember-hi);
+}
 
 /* The same offer on the summary screen, where the mis-tap lands you.
    A quiet line under Done — findable if you're looking for it,

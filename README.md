@@ -70,6 +70,18 @@ tells you exactly what to lift next.
   reading the history as it stood when you began — so an interrupted workout
   stays one workout rather than two short ones an hour apart, the second of them
   prescribing progression on top of the first.
+- **A session in progress is already saved** — the workout you're in the middle
+  of used to exist in one place only: a blob of JSON in the browser's local
+  storage, written to the log and the cloud when you tapped Finish and not a
+  moment before. A flat battery, a browser clearing site data, a phone left in a
+  locker — any of them took the whole session with it, and the backup had never
+  seen a set of it. Every set now writes the session as an *unfinished* row: on
+  disk, backed up like everything else, and invisible to the engine until it's
+  actually finished, so nothing you're halfway through logging can be read as
+  history. If a session ends without you, it's waiting at the top of Train
+  under **In progress** — on that phone or any other holding your key — and
+  Continue picks it up at the station you were standing at, same record, same
+  start time.
 - **Readiness check** (opt in, Setup → Progression → Autoregulation) — the log can't see that
   you slept four hours. Rate how you feel before a session and the day's
   prescription bends to match: a rough day trims a set and backs the load off
@@ -226,15 +238,29 @@ sit in front of the first render.
 ```sh
 npm install
 npm run dev      # local dev server
-npm test         # engine unit tests (vitest)
+npm test         # both suites (vitest)
+npm run lint     # eslint
 npm run build    # production build to dist/
 ```
 
+`npm test` runs two projects. **engine** (`*.test.ts`, node) covers the pure
+functions — progression, scheduling, cool-downs, sync planning. **ui**
+(`*.test.tsx`, jsdom + Testing Library) covers the screens, which for a long
+time had no tests at all: the session loop, where the data you can't re-derive
+is being held, and the shell that persists it. Both run in CI, along with the
+lint, before anything deploys.
+
+The lint config is deliberately short. It isn't a style guide — the code has
+one — it's there for what the type checker can't see: a hook reading a value it
+doesn't list, a promise dropped in a click handler.
+
 ## Deploy / install on your phone
 
-Pushing to `main` deploys to GitHub Pages via `.github/workflows/deploy.yml`
-(enable Pages → "GitHub Actions" in repo settings). Open the published URL on
-your phone and "Add to Home Screen" — it runs full-screen and fully offline.
+`.github/workflows/deploy.yml` runs the lint, both test projects and a
+production build on every pull request; pushing to `main` runs the same checks
+and then deploys to GitHub Pages (enable Pages → "GitHub Actions" in repo
+settings). Open the published URL on your phone and "Add to Home Screen" — it
+runs full-screen and fully offline.
 
 ## Cloud backup
 
@@ -255,6 +281,24 @@ project that already holds history.
 first run and syncs to a bucket named `forge-<sha256(key)>` — a value that never
 ships in the bundle and that the server never sees in plaintext. Reaching your
 data needs the key, not just the app's URL.
+
+**And the server is what enforces that**, which it previously wasn't. The table
+policies used to be `using (true)`: every request the app makes names its own
+bucket, but nothing required one to. Since the project URL and the anon key both
+ship in the published bundle, anyone who opened the app could ask PostgREST for
+`sessions` with no filter at all and get every bucket back — the unguessable
+name protected nothing, because the answer included the list of names. One
+unfiltered `delete` could have taken out the lot, too. Each request now has to
+name its bucket in an `x-forge-owner` header, and the row-level policies match
+`owner` against it: name none and you see nothing, name one and you see exactly
+that one. The header carries the already-hashed bucket — the same value the
+query string carried before — so nothing new leaves the device.
+
+If you are running your own copy, re-run `supabase-schema.sql` to pick this up;
+it replaces the old policies in place and touches no rows. Devices still running
+an older bundle stop syncing until the service worker updates them, and lose
+nothing while they wait — they keep their full local copy and reconcile on the
+next successful sync.
 
 To train across devices, open Setup → Backup & data on the device that has your
 history, reveal and copy the key, and enter it on the other device. Keep a copy

@@ -1,8 +1,13 @@
-name: Deploy to GitHub Pages
+name: Check and deploy
 
+# The checks are the same on a pull request as on main — lint, both test
+# projects, a production build — because a check that only runs after the merge
+# reports the breakage to nobody who can still stop it. Only the deploy is
+# gated on being main.
 on:
   push:
     branches: [main]
+  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -10,8 +15,10 @@ permissions:
   pages: write
   id-token: write
 
+# Per branch, so two pull requests in flight don't cancel each other — the old
+# single `pages` group meant the second push anywhere killed the first.
 concurrency:
-  group: pages
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -19,22 +26,26 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/configure-pages@v5
-        with:
-          enablement: false
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: npm run lint
       - run: npm test
       - run: npm run build
+      - uses: actions/configure-pages@v5
+        if: github.event_name != 'pull_request'
+        with:
+          enablement: false
       - uses: actions/upload-pages-artifact@v3
+        if: github.event_name != 'pull_request'
         with:
           path: dist
 
   deploy:
     needs: build
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
