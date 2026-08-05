@@ -87,6 +87,11 @@ export const BUILTIN_EXERCISES: Exercise[] = [
     'Rope at face height, pull towards your eyes while externally rotating — thumbs back.'),
   ex('rear-delt-fly', 'Rear Delt Fly', 'shoulders', ['back'], 'dumbbell', 'rear-delt', [12, 15], 1, 90, false,
     'Hinge over, soft elbows, sweep the bells wide — no shrugging into the traps.'),
+  // The rear-delt slot's stretch-biased option. Face pulls and hinged flys both
+  // peak at the squeeze and give the rear delt almost nothing in the lengthened
+  // position; taking the handle from the far side loads the stretch instead.
+  ex('cable-rear-delt-fly', 'Cable Rear Delt Fly', 'shoulders', ['back'], 'cable', 'rear-delt', [12, 15], 1.25, 90, false,
+    'Take the opposite-side handle so the arm starts across your chest — let it pull you into the stretch, then sweep wide and back.'),
 
   // ── Triceps ───────────────────────────────────────────
   ex('close-grip-bench', 'Close-Grip Bench Press', 'triceps', ['chest', 'shoulders'], 'barbell', 'triceps-press', [6, 10], 2.5, 150, true,
