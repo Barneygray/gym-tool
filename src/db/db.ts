@@ -118,6 +118,65 @@ export async function getHistory(): Promise<Session[]> {
 }
 
 /**
+ * How long an unfinished session stays offerable. Long enough to cover a
+ * workout that outlives a dead battery or a closed tab, short enough that a
+ * session abandoned last week isn't waiting to be walked back into.
+ */
+const DRAFT_TTL_MS = 24 * 3_600_000
+
+/**
+ * The live session as last saved — the row a workout in progress writes on
+ * every set, so it outlives the tab it was logged in.
+ *
+ * Sessions in progress used to exist only as a JSON blob in localStorage, which
+ * meant a dead phone, cleared site data, or a browser that refuses to write at
+ * all took the whole workout with it, and the cloud backup had never seen a
+ * single set of it. They're rows now, unfinished ones: invisible to `getHistory`
+ * — so the engine still can't read a set you're mid-way through logging as
+ * history — but on disk and on the same sync path as everything else.
+ */
+export async function getDraftSession(now: number = Date.now()): Promise<Session | undefined> {
+  const all = await db.sessions.orderBy('startedAt').reverse().toArray()
+  return all.find(
+    (s) =>
+      s.finishedAt === undefined &&
+      s.deletedAt === undefined &&
+      s.entries.length > 0 &&
+      now - s.startedAt < DRAFT_TTL_MS,
+  )
+}
+
+/**
+ * Save the session currently being logged.
+ *
+ * Same as `saveSession`, with one guard: a row that has already been finished
+ * stays finished. Continuing a session reopens the record it came from, and
+ * writing the live state straight over it would clear `finishedAt` — quietly
+ * pulling a workout that genuinely happened out of the log, out of the engine's
+ * history, and into reach of the abandon path. The sets travel; the fact that
+ * it happened isn't the live screen's to retract.
+ */
+export async function saveLiveSession(session: Session): Promise<Session> {
+  const existing = session.uuid ? await getSessionByUuid(session.uuid) : undefined
+  return saveSession(
+    existing?.finishedAt === undefined ? session : { ...session, finishedAt: existing.finishedAt },
+  )
+}
+
+/**
+ * Drop an in-progress session that was walked away from rather than finished.
+ * Tombstoned rather than deleted so the abandonment reaches the other devices
+ * that had already pulled the draft — and guarded on `finishedAt`, because the
+ * same "no active workout" transition happens when a session ends *properly*,
+ * and that row is the workout.
+ */
+export async function discardDraftSession(uuid: string): Promise<Session | undefined> {
+  const existing = await db.sessions.where('uuid').equals(uuid).first()
+  if (!existing || existing.finishedAt !== undefined) return undefined
+  return deleteSession(uuid)
+}
+
+/**
  * Write a session, reusing the row a session with the same uuid already
  * occupies. Resuming a finished session re-saves it under its original
  * identity, and without reusing the auto-increment key Dexie would file the
@@ -155,6 +214,11 @@ export async function deleteSession(uuid: string): Promise<Session | undefined> 
   return tombstoned
 }
 
+/** One session by uuid, tombstones included. */
+export async function getSessionByUuid(uuid: string): Promise<Session | undefined> {
+  return db.sessions.where('uuid').equals(uuid).first()
+}
+
 /** Every locally stored session, including tombstones — used by sync. */
 export async function getAllSessions(): Promise<Session[]> {
   return db.sessions.toArray()
@@ -173,7 +237,7 @@ export async function applyRemoteSessions(remote: Session[]): Promise<void> {
       const { id: _id, ...rest } = r
       const existingId = idByUuid.get(r.uuid)
       if (existingId !== undefined) await db.sessions.put({ ...rest, id: existingId })
-      else await db.sessions.add(rest as Session)
+      else await db.sessions.add(rest)
     }
   })
 }
@@ -461,7 +525,7 @@ async function applyBackup(parsed: BackupFile, rescue: string | null): Promise<v
       await db.sessions.clear()
       await db.sessions.bulkAdd(
         parsed.sessions.map(
-          ({ id: _id, ...rest }) => ({ ...rest, uuid: rest.uuid ?? crypto.randomUUID() }) as Session,
+          ({ id: _id, ...rest }) => ({ ...rest, uuid: rest.uuid ?? crypto.randomUUID() }),
         ),
       )
       if (parsed.settings) await db.settings.put({ ...parsed.settings, id: 'main' })

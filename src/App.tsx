@@ -1,13 +1,15 @@
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { BodyLog, DayId, Goal, ReadinessLevel, Session, SetLog, Settings } from './types'
 import {
-  DEFAULT_SETTINGS, getBodyLog, getGoals, getHistory, getSettings, loadCustomDays, loadCustomExercises, saveGoal,
+  DEFAULT_SETTINGS, discardDraftSession, getBodyLog, getDraftSession, getGoals, getHistory, getSessionByUuid,
+  getSettings, loadCustomDays, loadCustomExercises, saveGoal, saveLiveSession,
 } from './db/db'
-import { initSyncMode, onSyncError, pushRecord, runSync, supabaseConfigured } from './db/sync'
+import { initSyncMode, onSyncError, pushRecord, pushSession, runSync, supabaseConfigured } from './db/sync'
 import { reminderNudge } from './engine/reminder'
 import { newlyAchieved } from './engine/goals'
 import { bodyweightAt } from './engine/bodyweight'
-import { applyActiveProfile } from './engine/equipment'
+import { applyActiveProfile, activeProfile } from './engine/equipment'
+import { draftSession } from './engine/resume'
 import { notifyTrainingReminder } from './notify'
 import { BarbellIcon, ChartIcon, GearIcon, HistoryIcon, KettlebellIcon, StretchIcon } from './components/Icons'
 import { ErrorBoundary } from './components/ErrorBoundary'
@@ -50,14 +52,55 @@ export interface ActiveWorkout {
 const ACTIVE_KEY = 'forge-active-workout'
 const REMINDER_KEY = 'forge-reminder-shown' // start-of-day epoch of the last nudge
 
+/**
+ * How long the cloud copy of a session in progress may lag behind the local
+ * one. Every set, every station change and every swap writes the local row;
+ * pushing each of those would be a request a minute all session long, for a
+ * record that only matters if this device stops being able to answer for it.
+ */
+const DRAFT_PUSH_MS = 10_000
+
+/**
+ * localStorage, which on a phone is not a thing you may assume works: Safari in
+ * private browsing, storage turned off for the site, and a full quota all
+ * *throw* from `setItem` rather than quietly doing nothing.
+ *
+ * The reads here were always wrapped; the writes weren't — and one of them sits
+ * inside the state setter every logged set goes through, so on those devices
+ * logging a set threw out of the click handler and took the session screen down
+ * with it. Everywhere else in the app that touches storage already guards both
+ * halves (see `engine/breakerMemory.ts`); this is that, for the shell.
+ */
+const store = {
+  get(key: string): string | null {
+    try {
+      return localStorage.getItem(key)
+    } catch {
+      return null
+    }
+  },
+  set(key: string, value: string | null): void {
+    try {
+      if (value === null) localStorage.removeItem(key)
+      else localStorage.setItem(key, value)
+    } catch {
+      // Nothing to do about it — and for the live session, nothing lost either:
+      // the IndexedDB draft underneath is the copy that has to survive.
+    }
+  },
+}
+
 function loadActive(): ActiveWorkout | null {
   try {
-    const raw = localStorage.getItem(ACTIVE_KEY)
+    const raw = store.get(ACTIVE_KEY)
     return raw ? (JSON.parse(raw) as ActiveWorkout) : null
   } catch {
     return null
   }
 }
+
+const writeActive = (w: ActiveWorkout | null): void =>
+  store.set(ACTIVE_KEY, w === null ? null : JSON.stringify(w))
 
 export default function App() {
   const [tab, setTab] = useState<Tab>('today')
@@ -67,6 +110,8 @@ export default function App() {
   const [bodyLog, setBodyLog] = useState<BodyLog[]>([])
   const [goals, setGoals] = useState<Goal[]>([])
   const [active, setActiveState] = useState<ActiveWorkout | null>(loadActive)
+  /** A session left in progress — on this device or another one — to walk back into. */
+  const [draft, setDraft] = useState<Session | null>(null)
   const [ready, setReady] = useState(false)
   // The node sheets and the rest timer portal into. It has to be a child of
   // `.app` for them to measure against the same bottom edge as the tab bar.
@@ -74,6 +119,13 @@ export default function App() {
   const [syncing, setSyncing] = useState(false)
   const [syncError, setSyncError] = useState<string | null>(null)
   const refreshRef = useRef<() => Promise<void>>(async () => {})
+  // Read inside `setActive`, which has to stay identity-stable — every screen
+  // takes it as a prop — so the settings it needs come through a ref.
+  const settingsRef = useRef(settings)
+  settingsRef.current = settings
+  /** The uuid of the session currently being logged, if any. */
+  const draftUuid = useRef<string | null>(active?.sessionUuid ?? null)
+  const draftPush = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Keeps the shell exactly as tall as the visible viewport, so the tab bar
   // lands on the bottom edge of the screen and stays there.
@@ -96,6 +148,7 @@ export default function App() {
     setSettings(s)
     setBodyLog(bl)
     setGoals(g)
+    setDraft((await getDraftSession()) ?? null)
   }, [])
   refreshRef.current = refresh
 
@@ -111,15 +164,26 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-    refresh()
-      .then(async () => {
+    void (async () => {
+      try {
+        await refresh()
         // Settle which cloud bucket this device uses before the first sync: a
         // brand-new install gets a random private key, an install that already
         // has history stays on the shared bucket until it opts in.
         initSyncMode((await getHistory()).length > 0)
+      } catch {
+        // Whatever happened, open the app. Nothing renders until `ready`, so a
+        // first load that throws — a browser refusing IndexedDB, a corrupt row —
+        // used to leave a blank page with no way past it.
+      } finally {
         setReady(true)
-      })
-      .then(() => syncNow())
+      }
+      try {
+        await syncNow()
+      } catch {
+        // Backup failures surface through `onSyncError`, not by throwing here.
+      }
+    })()
   }, [refresh, syncNow])
 
   useEffect(() => onSyncError(setSyncError), [])
@@ -134,8 +198,8 @@ export default function App() {
       const nudge = reminderNudge(settings.reminder, history, now)
       if (!nudge.due) return
       const today = new Date(now).setHours(0, 0, 0, 0)
-      if (Number(localStorage.getItem(REMINDER_KEY)) === today) return
-      localStorage.setItem(REMINDER_KEY, String(today))
+      if (Number(store.get(REMINDER_KEY)) === today) return
+      store.set(REMINDER_KEY, String(today))
       void notifyTrainingReminder(nudge.title, nudge.body)
     }
     check()
@@ -149,11 +213,68 @@ export default function App() {
   // idea that profiles exist.
   const equipped = useMemo(() => applyActiveProfile(settings), [settings])
 
-  const setActive = useCallback((w: ActiveWorkout | null) => {
-    setActiveState(w)
-    if (w) localStorage.setItem(ACTIVE_KEY, JSON.stringify(w))
-    else localStorage.removeItem(ACTIVE_KEY)
+  /**
+   * Send the stored draft to the cloud. Deliberately re-reads the row instead
+   * of pushing what was in hand when the timer was set: by the time it fires
+   * the session may have been finished or abandoned, and pushing the older copy
+   * would hand the cloud a session that had un-finished itself.
+   */
+  const flushDraft = useCallback(async (uuid: string) => {
+    if (draftPush.current) {
+      clearTimeout(draftPush.current)
+      draftPush.current = null
+    }
+    const row = await getSessionByUuid(uuid)
+    if (row) void pushSession(row)
   }, [])
+
+  /** Tombstone an unfinished row, so the abandonment reaches other devices. */
+  const discard = useCallback((uuid: string) => {
+    void discardDraftSession(uuid).then((t) => t && pushSession(t))
+  }, [])
+
+  const setActive = useCallback((w: ActiveWorkout | null) => {
+    // Every live session is a row, so it needs an identity from the first set —
+    // not at Finish, which is exactly the moment it might never reach.
+    const next = w === null || w.sessionUuid ? w : { ...w, sessionUuid: crypto.randomUUID() }
+    setActiveState(next)
+    writeActive(next)
+
+    const previous = draftUuid.current
+    draftUuid.current = next?.sessionUuid ?? null
+    setDraft(null)
+
+    if (next === null) {
+      // Walking away from a session in progress discards it; walking away from
+      // one that was *finished* must not — same transition, different row.
+      if (previous) discard(previous)
+      return
+    }
+
+    const session = draftSession(next, activeProfile(settingsRef.current).id)
+    if (!session.uuid) return
+    // Nothing logged is nothing to recover: no row for a session that hasn't
+    // started, and no stale row left behind by one whose sets were all deleted.
+    if (session.entries.length === 0) {
+      discard(session.uuid)
+      return
+    }
+    void saveLiveSession(session)
+    const uuid = session.uuid
+    if (draftPush.current) clearTimeout(draftPush.current)
+    draftPush.current = setTimeout(() => void flushDraft(uuid), DRAFT_PUSH_MS)
+  }, [discard, flushDraft])
+
+  // Back the session up the moment the app is backgrounded or closed, rather
+  // than waiting out the debounce — that's precisely when the device is about
+  // to stop being able to answer for it.
+  useEffect(() => {
+    const flush = () => {
+      if (document.visibilityState === 'hidden' && draftUuid.current) void flushDraft(draftUuid.current)
+    }
+    document.addEventListener('visibilitychange', flush)
+    return () => document.removeEventListener('visibilitychange', flush)
+  }, [flushDraft])
 
   if (!ready) return null
 
@@ -194,7 +315,7 @@ export default function App() {
               <>
                 {tab === 'today' && (
                   <TodayScreen history={history} settings={equipped} bodyLog={bodyLog}
-                    startWorkout={setActive} onChanged={refresh} />
+                    draft={draft} startWorkout={setActive} onChanged={refresh} />
                 )}
                 <Suspense fallback={<div className="screen-loading">Loading…</div>}>
                   {tab === 'log' && <LogScreen history={history} onChanged={refresh} />}

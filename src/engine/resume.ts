@@ -72,6 +72,39 @@ export function resumeWorkout(session: Session): ActiveWorkout {
 }
 
 /**
+ * The inverse: the session row a live workout should be saved as, so the work
+ * survives the device it's being logged on. Deliberately the same shape the
+ * finished session will take, minus `finishedAt` — finishing rewrites this row
+ * rather than filing a new one, so a workout that was recovered mid-way still
+ * reads as one workout with one start time.
+ *
+ * Stations with nothing logged against them are dropped, exactly as `finish`
+ * drops them: a draft is what you've *done*, not what you planned to do.
+ */
+export function draftSession(active: ActiveWorkout, profileId?: string): Session {
+  const entries = active.exerciseIds
+    .map((id) => ({ exerciseId: id, sets: active.logged[id] ?? [] }))
+    .filter((e) => e.sets.length > 0)
+  return {
+    uuid: active.sessionUuid ?? '',
+    dayType: active.dayType,
+    startedAt: active.startedAt,
+    entries,
+    ...(active.readiness ? { readiness: active.readiness } : {}),
+    ...(profileId ? { profileId } : {}),
+  }
+}
+
+/** How long a session in progress has been running, for the recovery prompt. */
+export function startedAgoLabel(session: Session, now: number): string {
+  const mins = Math.floor((now - session.startedAt) / 60_000)
+  if (mins < 1) return 'just now'
+  if (mins < 60) return `${mins} min ago`
+  const hrs = Math.round(mins / 60)
+  return `${hrs} hr${hrs === 1 ? '' : 's'} ago`
+}
+
+/**
  * History as the engine should read it while a session is being continued. The
  * session is already saved, so left in place it would be its own "last time":
  * every suggestion would try to progress on top of the sets you logged twenty
