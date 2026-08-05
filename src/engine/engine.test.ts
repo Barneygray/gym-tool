@@ -125,6 +125,23 @@ describe('rotation', () => {
     expect(options).toContain('cable-fly')
     expect(options).not.toContain('bench-press')
   })
+
+  it('rotates the rear-delt slot through all three options before repeating', () => {
+    const pull = dayById.get('pull')!
+    const slot = pull.slots.findIndex((s) => s.pool.includes('face-pull'))
+    const history: Session[] = []
+    const seen: string[] = []
+    for (let i = 0; i < 3; i++) {
+      const pick = generateWorkout(pull, history)[slot]
+      seen.push(pick)
+      history.push(session('pull', pick, [{ weight: 15, reps: 12 }]))
+    }
+    expect(new Set(seen).size).toBe(3)
+  })
+
+  it('offers the stretch-biased fly as a rear-delt sibling swap', () => {
+    expect(swapOptions('face-pull', ['face-pull'])).toContain('cable-rear-delt-fly')
+  })
 })
 
 describe('plates & warm-ups', () => {

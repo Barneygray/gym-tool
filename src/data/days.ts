@@ -27,7 +27,7 @@ export const BUILTIN_DAYS: DayTemplate[] = [
       { muscle: 'back', pool: ['deadlift', 'barbell-row'] },
       { muscle: 'back', pool: ['pull-up', 'lat-pulldown'] },
       { muscle: 'back', pool: ['seated-cable-row', 'chest-supported-row', 'db-row'] },
-      { muscle: 'shoulders', pool: ['face-pull', 'rear-delt-fly'] },
+      { muscle: 'shoulders', pool: ['face-pull', 'rear-delt-fly', 'cable-rear-delt-fly'] },
       { muscle: 'biceps', pool: ['barbell-curl', 'db-curl', 'cable-curl'] },
       { muscle: 'biceps', pool: ['hammer-curl', 'incline-db-curl', 'preacher-curl'] },
     ],
@@ -52,7 +52,7 @@ export const BUILTIN_DAYS: DayTemplate[] = [
     slots: [
       { muscle: 'shoulders', pool: ['overhead-press', 'arnold-press', 'seated-db-press'] },
       { muscle: 'shoulders', pool: ['lateral-raise', 'cable-lateral-raise'] },
-      { muscle: 'shoulders', pool: ['face-pull', 'rear-delt-fly'] },
+      { muscle: 'shoulders', pool: ['face-pull', 'rear-delt-fly', 'cable-rear-delt-fly'] },
       { muscle: 'triceps', pool: ['close-grip-bench', 'cable-pushdown'] },
       { muscle: 'biceps', pool: ['barbell-curl', 'incline-db-curl', 'cable-curl'] },
       { muscle: 'triceps', pool: ['skull-crusher', 'overhead-cable-ext'] },
