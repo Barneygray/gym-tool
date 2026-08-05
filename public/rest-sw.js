@@ -79,16 +79,27 @@ async function fireRest(title, body) {
   }
 }
 
-async function appOnScreen() {
+/**
+ * Our own windows. `includeUncontrolled` reaches across the whole origin, not
+ * just this scope, and on GitHub Pages the origin is shared with every other
+ * project on the account — so the scope filter is what makes these windows
+ * *ours*. Without it an unrelated tab left open on the same origin counted as
+ * the app being on screen, and silently ate the alert.
+ */
+async function appWindows() {
   const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+  return windows.filter((client) => client.url.startsWith(self.registration.scope))
+}
+
+async function appOnScreen() {
+  const windows = await appWindows()
   return windows.some((client) => client.visibilityState === 'visible')
 }
 
 async function openApp() {
-  const scope = self.registration.scope
-  const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+  const windows = await appWindows()
   for (const client of windows) {
-    if (client.url.startsWith(scope) && 'focus' in client) return client.focus()
+    if ('focus' in client) return client.focus()
   }
-  if (self.clients.openWindow) return self.clients.openWindow(scope)
+  if (self.clients.openWindow) return self.clients.openWindow(self.registration.scope)
 }

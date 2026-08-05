@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { cancelRestAlert, notifyRestDone, scheduleRestAlert } from '../notify'
+import { cancelRestAlert, notifyRestDone, primeNotifications, scheduleRestAlert } from '../notify'
 import { beep } from './chime'
 import { BrickBreaker } from './BrickBreaker'
 import { Overlay } from './Overlay'
@@ -42,6 +42,7 @@ export function RestTimer({
   // timestamp-triggered alert (where supported) the moment we actually go off
   // screen. Coming back cancels both: you're here, the timer speaks for itself.
   useEffect(() => {
+    primeNotifications()
     void scheduleRestAlert(endsAt, document.visibilityState === 'hidden')
     const onLeave = () => {
       if (document.visibilityState === 'hidden') void scheduleRestAlert(endsAt, true)

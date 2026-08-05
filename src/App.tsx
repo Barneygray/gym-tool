@@ -129,17 +129,24 @@ export default function App() {
   // re-checks when the tab returns to the foreground.
   useEffect(() => {
     if (!ready) return
-    const check = () => {
+    const check = async () => {
       const now = Date.now()
       const nudge = reminderNudge(settings.reminder, history, now)
       if (!nudge.due) return
       const today = new Date(now).setHours(0, 0, 0, 0)
       if (Number(localStorage.getItem(REMINDER_KEY)) === today) return
-      localStorage.setItem(REMINDER_KEY, String(today))
-      void notifyTrainingReminder(nudge.title, nudge.body)
+      // Spend the day's one nudge only on a notification that actually went
+      // out. Marking it up front meant opening the app before granting
+      // permission — the ordinary way round on a fresh install — burnt that
+      // day's reminder on a notification nobody ever saw.
+      if (await notifyTrainingReminder(nudge.title, nudge.body)) {
+        localStorage.setItem(REMINDER_KEY, String(today))
+      }
     }
-    check()
-    const onVisible = () => document.visibilityState === 'visible' && check()
+    void check()
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void check()
+    }
     document.addEventListener('visibilitychange', onVisible)
     return () => document.removeEventListener('visibilitychange', onVisible)
   }, [ready, settings.reminder, history])
