@@ -35,6 +35,14 @@ const KIND_LABEL = {
   increase: 'Level up', build: 'Beat last time', start: 'First time', deload: 'Deload & rebuild',
 } as const
 
+/**
+ * What the RPE picker can be in: unanswered, a rung, or a deliberate "no
+ * reading". Only `undefined` blocks logging — `'unsure'` is an answer, and it
+ * stores a set with no `rpe` at all so the engine reads it as absent rather
+ * than as a number the lifter didn't mean.
+ */
+type RpeChoice = number | 'unsure' | undefined
+
 // The guided cool-down runs after the session is already saved, so it has no
 // business being in the chunk that has to paint at the start of one.
 const CooldownScreen = lazyScreen(() => import('./Cooldown').then((m) => ({ default: m.CooldownScreen })))
@@ -141,7 +149,10 @@ function ActiveSession({
 
   const [weight, setWeight] = useState(0)
   const [reps, setReps] = useState(0)
-  const [rpe, setRpe] = useState<number | undefined>(undefined)
+  // Three states, not two: nothing answered yet (can't log), a rung, or an
+  // explicit "no reading to give". Only the last two let a set through, and
+  // only a rung reaches the engine.
+  const [rpe, setRpe] = useState<RpeChoice>(undefined)
   const [note, setNote] = useState('')
   const [showNote, setShowNote] = useState(false)
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
@@ -186,11 +197,14 @@ function ActiveSession({
   const writeSets = (sets: SetLog[]) => setActive({ ...active, logged: { ...active.logged, [exercise.id]: sets } })
 
   const commitSet = () => {
-    // RPE is part of a set, not a garnish on one: the engine sizes every jump
-    // from it, and a log where only the memorable sets got tagged reads as
-    // easier than the training was.
+    // Answering is required, because a log where only the memorable sets got
+    // tagged reads as easier than the training was. Answering *with a number*
+    // is not: "unsure" is a real answer, and it stores no RPE rather than a
+    // number nobody meant. Forcing a rung wouldn't produce a reading, only an
+    // entry — and the engine trusts entries.
     if (rpe === undefined || reps <= 0) return
-    const set: SetLog = { weight, reps, rpe }
+    const set: SetLog = { weight, reps }
+    if (rpe !== 'unsure') set.rpe = rpe
     if (note.trim()) set.note = note.trim()
 
     if (editingIndex !== null) {
@@ -218,7 +232,9 @@ function ActiveSession({
     setEditingIndex(i)
     setWeight(s.weight)
     setReps(s.reps)
-    setRpe(s.rpe)
+    // A stored set with no RPE was logged unsure — reopening it shouldn't
+    // demand a number the lifter already declined to invent.
+    setRpe(s.rpe ?? 'unsure')
     setNote(s.note ?? '')
     setShowNote(!!s.note)
     setRest(null)
@@ -477,8 +493,9 @@ function ActiveSession({
 
       {/* One "RPE" label, five numbers — the word used to be stamped on all
           five buttons, so half of each 60px target was the same three chars.
-          Required, so there's no un-picking a rung: the only way out is to
-          choose a different one. */}
+          The sixth rung is "?", and it costs exactly one tap like the rest:
+          a required field with no honest way to say "I don't know" doesn't
+          collect readings, it collects whatever clears the field fastest. */}
       <div className="rpe-field">
         <div className="rpe-row">
           <span className="label" aria-hidden="true">RPE</span>
@@ -490,12 +507,18 @@ function ActiveSession({
                 {r}
               </button>
             ))}
+            <button className={`unsure${rpe === 'unsure' ? ' on' : ''}`} aria-pressed={rpe === 'unsure'}
+              aria-label="Not sure — log this set without an RPE" onClick={() => setRpe('unsure')}>
+              ?
+            </button>
           </div>
         </div>
         <p className={`rpe-hint${rpe === undefined ? ' ask' : ''}`} id="rpe-hint" aria-live="polite">
           {rpe === undefined
-            ? 'How hard was that set? Required — 6 is easy, 10 is nothing left, and it sizes your next jump.'
-            : <><b className="num">{rpe}</b> · {rpeMeaning(rpe)}</>}
+            ? "How hard was that set? 6 is easy, 10 is nothing left — or tap ? if you genuinely can't say."
+            : rpe === 'unsure'
+              ? "No reading — logged as-is, and it won't size your next jump."
+              : <><b className="num">{rpe}</b> · {rpeMeaning(rpe)}</>}
         </p>
       </div>
 

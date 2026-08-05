@@ -1704,6 +1704,20 @@ input[type='number'] {
   border-color: var(--ember);
   background: var(--ember);
 }
+/* "No reading" is a real answer, so it's one tap like the rungs — but it isn't
+   a point on the scale, so it sits slightly apart and stays quiet when picked
+   rather than lighting up like a score. */
+.rpe-picker button.unsure {
+  flex: 0 0 36px;
+  margin-left: 4px;
+  border-style: dashed;
+}
+.rpe-picker button.unsure.on {
+  color: var(--text);
+  border-style: solid;
+  border-color: var(--text-faint);
+  background: var(--line);
+}
 
 /* ── Logged sets ────────────────────────────────────────── */
 .set-log {

@@ -8,7 +8,9 @@ import {
   weeklyPlan,
 } from './schedule'
 import { readinessEffect } from './readiness'
-import { RPE_SCALE, recentAvgRpe, rpeMeaning, rpeMultiplier, suggestFor } from './progression'
+import {
+  RPE_SCALE, recentAvgRpe, recentRpe, rpeMeaning, rpeMultiplier, rpeRamp, suggestFor,
+} from './progression'
 import { isStalled, madeProgress } from './stall'
 import { performancesOf } from './history'
 import { bodyweightAt } from './bodyweight'
@@ -137,17 +139,27 @@ describe('readiness', () => {
 describe('RPE-scaled progression', () => {
   const bench = getExercise('bench-press')
 
-  it('scales the jump continuously instead of flipping one switch', () => {
-    expect(rpeMultiplier(null)).toBe(1)
-    expect(rpeMultiplier(6.5)).toBe(2)
-    expect(rpeMultiplier(7.5)).toBe(1.5)
-    expect(rpeMultiplier(8.5)).toBe(1)
-    expect(rpeMultiplier(9.5)).toBe(0.5)
+  it('ramps the jump with no cliff to straddle', () => {
+    // It used to be a step function on these same anchors, so a mean of 7.0
+    // doubled the jump while 7.1 gave 1.5× — a boundary a single careless tap
+    // could push you over. The anchors are unchanged; the edges are gone.
+    expect(rpeRamp(7)).toBe(2)
+    expect(rpeRamp(8)).toBe(1.5)
+    expect(rpeRamp(9)).toBe(1)
+    expect(rpeRamp(10)).toBe(0.5)
+    expect(rpeRamp(7.5)).toBe(1.75)
+    expect(rpeRamp(7.04)).toBeCloseTo(rpeRamp(6.96), 1)
+  })
+
+  it('clamps the ramp so the bottom rung is not also the most aggressive', () => {
+    expect(rpeRamp(6)).toBe(2)
+    expect(rpeRamp(3)).toBe(2)
+    expect(rpeRamp(12)).toBe(0.5)
   })
 
   it('anchors every rung of the scale to reps in reserve', () => {
-    // The picker is required now, so the scale has to be readable without
-    // knowing what RPE is — every rung the UI offers gets a plain-words meaning.
+    // The scale has to be readable without knowing what RPE is — every rung
+    // the UI offers gets a plain-words meaning.
     expect([...RPE_SCALE]).toEqual([6, 7, 8, 9, 10])
     for (const r of RPE_SCALE) expect(rpeMeaning(r)).toMatch(/\w/)
     expect(rpeMeaning(6)).toMatch(/four or more/)
@@ -157,20 +169,81 @@ describe('RPE-scaled progression', () => {
 
   it('says the same thing the maths does', () => {
     // The rung explained as "two reps left" is the one that earns a middling
-    // jump; drift between the wording and the thresholds would make the
-    // explainer a lie.
-    expect(rpeMultiplier(6)).toBe(2)
-    expect(rpeMultiplier(8)).toBe(1.5)
-    expect(rpeMultiplier(10)).toBe(0.5)
+    // jump; drift between the wording and the ramp would make the explainer
+    // a lie.
+    expect(rpeRamp(6)).toBe(2)
+    expect(rpeRamp(8)).toBe(1.5)
+    expect(rpeRamp(10)).toBe(0.5)
   })
 
-  it('averages RPE across recent sessions, ignoring untagged sets', () => {
+  it('averages RPE across recent sessions, ignoring sets logged unsure', () => {
     const history = [
       session('push', 'bench-press', [{ weight: 80, reps: 8, rpe: 7 }, { weight: 80, reps: 8 }], NOW - DAY),
       session('push', 'bench-press', [{ weight: 80, reps: 8, rpe: 9 }], NOW - 4 * DAY),
     ]
+    const read = recentRpe(performancesOf('bench-press', history))
+    expect(read?.avg).toBe(8)
+    expect(read?.n).toBe(2)
     expect(recentAvgRpe(performancesOf('bench-press', history))).toBe(8)
-    expect(recentAvgRpe(performancesOf('bench-press', []))).toBeNull()
+    expect(recentRpe(performancesOf('bench-press', []))).toBeNull()
+  })
+
+  it('reads nothing at all from a session logged entirely unsure', () => {
+    // Every set answered, none with a number: that's an absence of evidence,
+    // and it has to land on the conservative default rather than on "easy".
+    const history = [session('push', 'bench-press', [
+      { weight: 80, reps: 8 }, { weight: 80, reps: 8 },
+    ], NOW - DAY)]
+    expect(recentRpe(performancesOf('bench-press', history))).toBeNull()
+    expect(rpeMultiplier(null)).toBe(1)
+  })
+
+  it('shrinks the jump toward neutral when the read is thin', () => {
+    const thin = recentRpe(performancesOf('bench-press', [
+      session('push', 'bench-press', [{ weight: 80, reps: 8, rpe: 6 }], NOW - DAY),
+    ]))!
+    const solid = recentRpe(performancesOf('bench-press', [
+      session('push', 'bench-press', [
+        { weight: 80, reps: 8, rpe: 6 }, { weight: 80, reps: 8, rpe: 6 }, { weight: 80, reps: 8, rpe: 6 },
+      ], NOW - DAY),
+      session('push', 'bench-press', [
+        { weight: 80, reps: 8, rpe: 6 }, { weight: 80, reps: 8, rpe: 6 }, { weight: 80, reps: 8, rpe: 6 },
+      ], NOW - 4 * DAY),
+    ]))!
+    expect(thin.avg).toBe(solid.avg)
+    expect(rpeMultiplier(thin)).toBeLessThan(rpeMultiplier(solid))
+    expect(rpeMultiplier(thin)).toBeGreaterThan(1)
+  })
+
+  it('shrinks the jump toward neutral when the tags disagree', () => {
+    const agreed = recentRpe(performancesOf('bench-press', [
+      session('push', 'bench-press', [
+        { weight: 80, reps: 8, rpe: 7 }, { weight: 80, reps: 8, rpe: 7 }, { weight: 80, reps: 8, rpe: 7 },
+      ], NOW - DAY),
+    ]))!
+    const scattered = recentRpe(performancesOf('bench-press', [
+      session('push', 'bench-press', [
+        { weight: 80, reps: 8, rpe: 6 }, { weight: 80, reps: 8, rpe: 7 }, { weight: 80, reps: 8, rpe: 8 },
+      ], NOW - DAY),
+    ]))!
+    expect(scattered.avg).toBe(agreed.avg)
+    expect(scattered.spread).toBeGreaterThan(agreed.spread)
+    expect(rpeMultiplier(scattered)).toBeLessThan(rpeMultiplier(agreed))
+  })
+
+  it('never lets confidence flip the direction the RPE pointed', () => {
+    // Damping pulls toward 1 from whichever side; it must not cross it, or a
+    // grind would earn a bigger jump than a comfortable session.
+    for (const rpe of RPE_SCALE) {
+      const read = recentRpe(performancesOf('bench-press', [
+        session('push', 'bench-press', [{ weight: 80, reps: 8, rpe }], NOW - DAY),
+      ]))!
+      const m = rpeMultiplier(read)
+      if (rpeRamp(rpe) > 1) expect(m).toBeGreaterThan(1)
+      if (rpeRamp(rpe) < 1) expect(m).toBeLessThan(1)
+      expect(m).toBeGreaterThanOrEqual(0.5)
+      expect(m).toBeLessThanOrEqual(2)
+    }
   })
 
   it('a grinding top-of-range session earns a smaller jump than an easy one', () => {
