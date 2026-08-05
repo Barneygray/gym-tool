@@ -256,9 +256,11 @@ doesn't list, a promise dropped in a click handler.
 
 ## Deploy / install on your phone
 
-Pushing to `main` deploys to GitHub Pages via `.github/workflows/deploy.yml`
-(enable Pages → "GitHub Actions" in repo settings). Open the published URL on
-your phone and "Add to Home Screen" — it runs full-screen and fully offline.
+`.github/workflows/deploy.yml` runs the lint, both test projects and a
+production build on every pull request; pushing to `main` runs the same checks
+and then deploys to GitHub Pages (enable Pages → "GitHub Actions" in repo
+settings). Open the published URL on your phone and "Add to Home Screen" — it
+runs full-screen and fully offline.
 
 ## Cloud backup
 
