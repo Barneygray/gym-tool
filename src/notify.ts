@@ -4,6 +4,9 @@ const REST_TAG = 'forge-rest'
 const REST_TITLE = 'Rest complete'
 const REST_BODY = 'Time for your next set.'
 
+/** How long to wait on a worker that hasn't activated yet before giving up. */
+const READY_TIMEOUT_MS = 3000
+
 const restOptions: NotificationOptions = {
   body: REST_BODY,
   tag: REST_TAG,
@@ -29,14 +32,40 @@ export async function requestNotifications(): Promise<NotificationPermission> {
   }
 }
 
-/** The active service worker, if one is registered (none in dev). */
-async function registration(): Promise<ServiceWorkerRegistration | undefined> {
+function serviceWorkers(): ServiceWorkerContainer | undefined {
   if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return undefined
+  return navigator.serviceWorker
+}
+
+let cachedReg: ServiceWorkerRegistration | undefined
+
+/**
+ * The registered service worker, cached once we have it (there's none in dev).
+ *
+ * `getRegistration()` answers `undefined` while a first registration is still in
+ * flight — the registration script vite-plugin-pwa injects only runs on `load`,
+ * so a rest started in the opening seconds of a fresh install used to find
+ * nothing here and go through the whole rest with no alarm armed at all. Wait
+ * on `ready` in that case, bounded: a browser that never activates a worker
+ * must not leave the caller hanging forever.
+ */
+async function registration(): Promise<ServiceWorkerRegistration | undefined> {
+  const sw = serviceWorkers()
+  if (!sw) return undefined
+  if (cachedReg) return cachedReg
   try {
-    return (await navigator.serviceWorker.getRegistration()) ?? undefined
+    cachedReg = (await sw.getRegistration()) ?? (await readyWithin(sw, READY_TIMEOUT_MS))
+    return cachedReg
   } catch {
     return undefined
   }
+}
+
+function readyWithin(sw: ServiceWorkerContainer, ms: number): Promise<ServiceWorkerRegistration | undefined> {
+  return Promise.race([
+    sw.ready,
+    new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), ms)),
+  ])
 }
 
 /**
@@ -46,6 +75,28 @@ async function registration(): Promise<ServiceWorkerRegistration | undefined> {
  */
 function worker(reg: ServiceWorkerRegistration): ServiceWorker | null {
   return reg.active ?? reg.waiting ?? reg.installing
+}
+
+/** The deadline the worker is currently holding, so we can hand it over again. */
+let pendingRest: number | null = null
+let watchingController = false
+
+/**
+ * A worker that takes over mid-rest starts with none of its predecessor's
+ * state, so the alarm the old one was holding dies with it. `registerType:
+ * 'autoUpdate'` makes that routine rather than rare — a deploy landing between
+ * two sets used to swallow the alert — so re-hand the deadline to whoever is in
+ * charge now. The timestamp trigger needs no such care: it lives in the
+ * browser's notification store, not in worker memory.
+ */
+function watchController(): void {
+  const sw = serviceWorkers()
+  if (!sw || watchingController) return
+  watchingController = true
+  sw.addEventListener('controllerchange', () => {
+    cachedReg = undefined
+    if (pendingRest !== null) void scheduleRestAlert(pendingRest)
+  })
 }
 
 /**
@@ -66,6 +117,8 @@ function worker(reg: ServiceWorkerRegistration): ServiceWorker | null {
 export async function scheduleRestAlert(endsAt: number, backgrounded = false): Promise<void> {
   if (notificationPermission() !== 'granted') return
   if (endsAt <= Date.now()) return
+  pendingRest = endsAt
+  watchController()
   const reg = await registration()
   if (!reg) return
   worker(reg)?.postMessage({ type: 'forge-rest-schedule', at: endsAt, title: REST_TITLE, body: REST_BODY })
@@ -74,6 +127,7 @@ export async function scheduleRestAlert(endsAt: number, backgrounded = false): P
 
 /** Stand down a scheduled alert, and clear one that already fired. */
 export async function cancelRestAlert(): Promise<void> {
+  pendingRest = null
   const reg = await registration()
   if (!reg) return
   worker(reg)?.postMessage({ type: 'forge-rest-cancel' })
@@ -108,6 +162,17 @@ async function armTrigger(reg: ServiceWorkerRegistration, endsAt: number): Promi
 }
 
 /**
+ * Warm the registration cache so the paths that run as the app is going off
+ * screen don't have to wait on `getRegistration()` first. The browser can
+ * freeze a page moments after its `visibilitychange` handler returns, and
+ * anything still sat in a promise chain at that point never runs — so the
+ * lookup happens while the rest starts, not while the screen is going dark.
+ */
+export function primeNotifications(): void {
+  void registration()
+}
+
+/**
  * Fire a "rest over" alert. Only shown when the page is hidden — in the
  * foreground the in-app timer already signals. Prefers the service-worker
  * registration (required for notifications from an installed PWA), falling
@@ -136,9 +201,14 @@ export async function notifyRestDone(): Promise<void> {
 /**
  * Fire a "time to train" nudge. Unlike the rest alert this is allowed while the
  * app is foregrounded too — the caller (App) rate-limits it to once per day.
+ *
+ * Reports whether the notification actually went out, because the caller spends
+ * the day's one nudge on the strength of the answer: permission not granted yet
+ * is the ordinary case on a fresh install, and treating that as delivered burnt
+ * the nudge for the rest of the day.
  */
-export async function notifyTrainingReminder(title: string, body: string): Promise<void> {
-  if (notificationPermission() !== 'granted') return
+export async function notifyTrainingReminder(title: string, body: string): Promise<boolean> {
+  if (notificationPermission() !== 'granted') return false
   const options: NotificationOptions = {
     body,
     tag: 'forge-train-reminder',
@@ -149,10 +219,12 @@ export async function notifyTrainingReminder(title: string, body: string): Promi
     const reg = await registration()
     if (reg) {
       await reg.showNotification(title, options)
-      return
+      return true
     }
     new Notification(title, options)
+    return true
   } catch {
     // Notification unavailable — the in-app banner still nudges.
+    return false
   }
 }
