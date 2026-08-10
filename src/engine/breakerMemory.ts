@@ -15,7 +15,7 @@
  */
 
 import {
-  BREAKER_LEVELS, FIELD_W, LIVES, WALL,
+  BREAKER_LEVELS, FIELD_W, LIVES, MAX_LIVES, WALL,
   buildBricks, movePaddle, newGame, park,
   type Brick, type BreakerState, type BreakerStatus,
 } from './breaker'
@@ -136,6 +136,11 @@ export function restoreMemory(raw: string | null, session: string): BreakerMemor
  * own numbers (ball speed, paddle width) are read fresh, so a rebalanced level
  * applies to a run in progress instead of being frozen at whatever shipped the
  * day it started.
+ *
+ * Abilities are deliberately *not* stored. They're eight-to-twelve-second
+ * things, and a rest is ninety: whatever was running when you put the phone
+ * down had expired long before you picked it back up, and a capsule still in
+ * mid-air belongs to a rally that isn't happening any more.
  */
 function validState(v: unknown): BreakerState | null {
   if (!isObj(v)) return null
@@ -144,16 +149,22 @@ function validState(v: unknown): BreakerState | null {
   if (!isStatus(v.status)) return null
 
   const level = BREAKER_LEVELS[levelIndex]
-  const lives = Math.min(count(v.lives), LIVES)
+  const lives = Math.min(count(v.lives), MAX_LIVES)
   const s: BreakerState = {
     levelIndex,
     status: v.status,
     bricks: validBricks(v.bricks) ?? buildBricks(level),
-    ball: { x: FIELD_W / 2, y: 0, vx: 0, vy: 0 },
+    balls: [],
+    drops: [],
+    bolts: [],
+    effects: {},
     paddle: { x: FIELD_W / 2, w: level.paddleW },
     speed: level.speed,
     lives,
     score: count(v.score),
+    reload: 0,
+    // You're coming back to the run, not to the ball you just lost.
+    dropped: false,
   }
 
   // Whatever it was doing when you walked off, it isn't doing it now: the ball
@@ -161,7 +172,11 @@ function validState(v: unknown): BreakerState | null {
   // to a rally already in flight.
   if (s.status === 'playing') s.status = 'ready'
   if (s.lives <= 0) s.status = 'over'
-  else if (s.bricks.length === 0 && s.status === 'ready') s.status = clearedStatus(levelIndex)
+  else if (s.status === 'ready' && !s.bricks.some((b) => !b.solid)) {
+    // Steel doesn't count towards clearing, so a field of nothing but steel
+    // is a level that was already finished.
+    s.status = clearedStatus(levelIndex)
+  }
   movePaddle(s, num(isObj(v.paddle) ? v.paddle.x : undefined) ?? FIELD_W / 2)
   park(s)
   return s
@@ -187,7 +202,7 @@ function validBricks(v: unknown): Brick[] | null {
     if (x === null || y === null || w === null || h === null || hp === null || maxHp === null) return null
     if (w <= 0 || h <= 0 || hp < 1 || hp > maxHp) return null
     if (x < WALL - 0.5 || x + w > FIELD_W - WALL + 0.5) return null
-    bricks.push({ x, y, w, h, hp, maxHp })
+    bricks.push({ x, y, w, h, hp, maxHp, solid: b.solid === true })
   }
   return bricks
 }

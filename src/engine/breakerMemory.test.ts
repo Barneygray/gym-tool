@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { BREAKER_LEVELS, FIELD_W, LIVES, PADDLE_Y, WALL, newGame, step } from './breaker'
+import {
+  BREAKER_LEVELS, FIELD_W, LIVES, MAX_LIVES, PADDLE_Y, WALL,
+  collect, fire, newGame, step,
+} from './breaker'
 import {
   freshMemory, hasProgress, loadMemory, nextRun, restoreMemory, saveMemory,
   type MemoryStore,
@@ -50,18 +53,54 @@ describe('brick breaker session memory', () => {
     const store = fakeStore()
     const s = newGame()
     s.status = 'playing'
-    s.ball = { x: 40, y: 120, vx: 90, vy: -140 }
+    s.balls = [{ x: 40, y: 120, vx: 90, vy: -140 }, { x: 200, y: 90, vx: -60, vy: 130 }]
     s.score = 60
     saveMemory(SESSION, { state: s, best: 0, runs: 0 }, store)
 
     const back = loadMemory(SESSION, store).state
     expect(back.status).toBe('ready')
-    expect(back.ball.vx).toBe(0)
-    expect(back.ball.vy).toBe(0)
-    expect(back.ball.y).toBeLessThan(PADDLE_Y)
+    // One ball, on the paddle, stopped — multiball doesn't survive the walk
+    // back to the bench either.
+    expect(back.balls).toHaveLength(1)
+    expect(back.balls[0].vx).toBe(0)
+    expect(back.balls[0].vy).toBe(0)
+    expect(back.balls[0].y).toBeLessThan(PADDLE_Y)
     // And it stays where it was put until it's served again.
     step(back, 1)
-    expect(back.ball.y).toBeLessThan(PADDLE_Y)
+    expect(back.balls[0].y).toBeLessThan(PADDLE_Y)
+  })
+
+  it('forgets the abilities that were running, because they had expired anyway', () => {
+    const store = fakeStore()
+    const s = newGame(1)
+    s.status = 'playing'
+    collect(s, 'wide')
+    collect(s, 'laser')
+    fire(s)
+    s.score = 120
+    s.drops = [{ x: 100, y: 200, kind: 'multi' }]
+    saveMemory(SESSION, { state: s, best: 0, runs: 0 }, store)
+
+    const back = loadMemory(SESSION, store).state
+    expect(back.score).toBe(120)
+    expect(back.effects).toEqual({})
+    expect(back.drops).toEqual([])
+    expect(back.bolts).toEqual([])
+    expect(back.reload).toBe(0)
+    expect(back.paddle.w).toBe(BREAKER_LEVELS[1].paddleW)
+  })
+
+  it('keeps steel standing, and reads a field of nothing but steel as cleared', () => {
+    const store = fakeStore()
+    const s = newGame(BREAKER_LEVELS.length - 1)
+    s.bricks = s.bricks.filter((b) => b.solid)
+    expect(s.bricks.length).toBeGreaterThan(0)
+    s.score = 700
+    saveMemory(SESSION, { state: s, best: 0, runs: 0 }, store)
+
+    const back = loadMemory(SESSION, store).state
+    expect(back.bricks.every((b) => b.solid)).toBe(true)
+    expect(back.status).toBe('complete')
   })
 
   it('remembers the best run of the session once a run ends', () => {
@@ -180,7 +219,9 @@ describe('brick breaker session memory', () => {
       }),
       SESSION,
     )
-    expect(m.state.lives).toBe(LIVES)
+    // Extra lives are catchable, so the ceiling is the ability's, not the
+    // one a run starts on.
+    expect(m.state.lives).toBe(MAX_LIVES)
     expect(m.state.score).toBe(0)
     expect(m.best).toBe(0)
     expect(m.runs).toBe(0)

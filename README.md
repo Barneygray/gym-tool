@@ -108,10 +108,16 @@ tells you exactly what to lift next.
   won't sleep mid-set, and (opt-in in Setup → Alerts) fires a notification when rest is
   up even if the app is backgrounded or the screen is off.
 - **Brick breaker in the rest timer** — rest is dead time you're not allowed to
-  skip, so the timer offers a game instead of a scroll: five levels of brick
+  skip, so the timer offers a game instead of a scroll: ten levels of brick
   breaker in a modal, the ball speeding up and the paddle narrowing as you
-  clear them. The clock sits in its header and the whole thing closes itself
-  the moment rest is up, so the game can never be the reason you missed a set.
+  clear them, with steel blocks and four-hit bricks in the field by the back
+  half. Broken bricks drop abilities that *fall* — a wider paddle, a slower
+  ball, multiball, paddle lasers, an extra life — so taking one means leaving
+  the ball to itself for a second; from the fourth level on, some of what falls
+  is a narrower paddle or a faster ball, and is worth dodging. The run belongs
+  to the workout, so the next rest picks it up where you left it. The clock
+  sits in its header and the whole thing closes itself the moment rest is up,
+  so the game can never be the reason you missed a set.
 - **Dumbbells say which weight they mean** — "24 kg" on a dumbbell lift is
   ambiguous until you know whether that's one bell or the pair, and a history
   where the answer quietly drifted is worth less than no history. Forge names
