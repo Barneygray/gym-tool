@@ -2082,6 +2082,42 @@ input[type='number'] {
   letter-spacing: 0.13em;
   text-transform: uppercase;
 }
+/* The abilities you're currently holding, in the footer's slot — the hint
+   only matters until something is actually running. */
+.bb-fx {
+  margin-top: var(--s3);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--s1);
+  min-height: 17px;
+}
+.bb-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--ember-line);
+  background: var(--ember-soft);
+  color: var(--ember-hi);
+  font-size: 9.5px;
+  font-weight: 650;
+  font-stretch: var(--w-cond);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.bb-chip.bad {
+  border-color: rgba(239, 79, 82, 0.32);
+  background: rgba(239, 79, 82, 0.1);
+  color: var(--bad);
+}
+.bb-chip b {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.75;
+}
 
 /* ═══ Session summary ═════════════════════════════════════
    Three figures on one rule, divided by hairlines. A spec

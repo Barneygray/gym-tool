@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
-  BALL_R, BREAKER_LEVELS, FIELD_H, FIELD_W, LIVES, PADDLE_H, PADDLE_Y, WALL,
-  launch, movePaddle, newGame, step, type BreakerState,
+  ABILITIES, BALL_R, BOLT_H, BOLT_W, BREAKER_LEVELS, DROP_H, DROP_W,
+  FIELD_H, FIELD_W, LIVES, MAX_LIVES, PADDLE_H, PADDLE_Y, WALL,
+  fire, launch, levelOf, movePaddle, newGame, step,
+  type AbilityKind, type BreakerState,
 } from '../engine/breaker'
 import { loadMemory, nextRun, saveMemory } from '../engine/breakerMemory'
 import { CloseIcon } from './Icons'
@@ -24,18 +26,26 @@ interface Hud {
   status: BreakerState['status']
   lives: number
   score: number
+  /** Whether the parked ball is one just dropped, rather than one not yet served. */
+  dropped: boolean
+  /** Abilities running, with whole seconds left — the chips under the field. */
+  fx: { kind: AbilityKind; left: number }[]
 }
 
 /**
  * The rest-timer's brick breaker: a canvas the size of the modal, a paddle that
- * follows your thumb, and five levels. The clock stays in the header and the
+ * follows your thumb, and ten levels. The clock stays in the header and the
  * whole thing is torn down the moment rest is over — this is somewhere to put
  * ninety seconds, not somewhere to be when the next set starts.
  *
  * Torn down, but not forgotten: the run is stored against the session, so the
  * next rest opens on the level you were on with the bricks you'd already
- * broken. Five levels is more than ninety seconds' worth; an hour of rests is
- * about right.
+ * broken. Ten levels is far more than ninety seconds' worth; an hour of rests
+ * is about right.
+ *
+ * Broken bricks drop abilities, and they fall — catching one means leaving the
+ * ball to look after itself for a second, which is the trade. From the fourth
+ * level on, some of what falls is worth dodging.
  */
 export function BrickBreaker({ remainingSec, sessionKey, onClose }: BrickBreakerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -79,6 +89,18 @@ export function BrickBreaker({ remainingSec, sessionKey, onClose }: BrickBreaker
     setHud(snapshot(game.current))
     persist()
   }, [persist])
+
+  /**
+   * A tap mid-rally means something once you're holding lasers, so they get
+   * first refusal on it. Everything else is the overlay's button.
+   */
+  const tap = useCallback(() => {
+    if (fire(game.current)) {
+      setHud(snapshot(game.current))
+      return
+    }
+    advance()
+  }, [advance])
 
   useEffect(() => {
     const el = canvasRef.current
@@ -148,7 +170,7 @@ export function BrickBreaker({ remainingSec, sessionKey, onClose }: BrickBreaker
       if (e.key === 'Escape') return onClose()
       if (e.key === ' ' || e.key === 'Enter') {
         e.preventDefault()
-        return advance()
+        return tap()
       }
       const nudge = e.key === 'ArrowLeft' ? -18 : e.key === 'ArrowRight' ? 18 : 0
       if (nudge) {
@@ -158,14 +180,15 @@ export function BrickBreaker({ remainingSec, sessionKey, onClose }: BrickBreaker
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [advance, onClose])
+  }, [onClose, tap])
 
-  const level = BREAKER_LEVELS[Math.min(hud.levelIndex, BREAKER_LEVELS.length - 1)]
+  const level = levelOf(hud)
   const mm = Math.floor(Math.max(0, remainingSec) / 60)
   const ss = Math.floor(Math.max(0, remainingSec) % 60)
   /** The session's high score, which the run in progress can already be. */
   const best = Math.max(tally.current.best, hud.score)
   const overlay = overlayFor(hud, { best, returning })
+  const lifeSlots = Math.max(LIVES, Math.min(hud.lives, MAX_LIVES))
 
   return (
     <Overlay>
@@ -180,7 +203,7 @@ export function BrickBreaker({ remainingSec, sessionKey, onClose }: BrickBreaker
             </div>
           </div>
           <div className="bb-lives" aria-label={`${hud.lives} lives left`}>
-            {[0, 1, 2].map((i) => (
+            {Array.from({ length: lifeSlots }, (_, i) => (
               <span key={i} className={`bb-life${i < hud.lives ? ' on' : ''}`} />
             ))}
           </div>
@@ -197,7 +220,7 @@ export function BrickBreaker({ remainingSec, sessionKey, onClose }: BrickBreaker
             onPointerDown={(e) => {
               e.currentTarget.setPointerCapture(e.pointerId)
               aim(e.clientX)
-              advance()
+              tap()
             }}
             onPointerMove={(e) => aim(e.clientX)}
           />
@@ -212,18 +235,52 @@ export function BrickBreaker({ remainingSec, sessionKey, onClose }: BrickBreaker
           )}
         </div>
 
-        <div className="bb-foot">Drag to move · rest keeps counting</div>
+        {/* The footer is the hint until something's running, then it's the
+            readout — there's nowhere else on a phone-sized modal to put it. */}
+        {hud.fx.length > 0 ? (
+          <div className="bb-fx" aria-label="Abilities running">
+            {hud.fx.map((f) => (
+              <span key={f.kind} className={`bb-chip${ABILITIES[f.kind].good ? '' : ' bad'}`}>
+                {ABILITIES[f.kind].name} <b className="num">{f.left}s</b>
+              </span>
+            ))}
+          </div>
+        ) : (
+          <div className="bb-foot">
+            {footHint(hud.levelIndex)}
+          </div>
+        )}
       </div>
     </Overlay>
   )
 }
 
 function snapshot(s: BreakerState): Hud {
-  return { levelIndex: s.levelIndex, status: s.status, lives: s.lives, score: s.score }
+  return {
+    levelIndex: s.levelIndex,
+    status: s.status,
+    lives: s.lives,
+    score: s.score,
+    dropped: s.dropped,
+    fx: (Object.keys(s.effects) as AbilityKind[])
+      .map((kind) => ({ kind, left: Math.ceil(s.effects[kind] ?? 0) }))
+      .sort((a, b) => a.kind.localeCompare(b.kind)),
+  }
 }
 
+/** Whole-second resolution, so a running ability redraws once a second. */
+const fxKey = (fx: Hud['fx']): string => fx.map((f) => `${f.kind}${f.left}`).join(',')
+
 function sameHud(a: Hud, b: Hud): boolean {
-  return a.levelIndex === b.levelIndex && a.status === b.status && a.lives === b.lives && a.score === b.score
+  return a.levelIndex === b.levelIndex && a.status === b.status && a.lives === b.lives
+    && a.score === b.score && a.dropped === b.dropped && fxKey(a.fx) === fxKey(b.fx)
+}
+
+/** The line under the field, which changes once the level can turn on you. */
+function footHint(levelIndex: number): string {
+  return levelOf({ levelIndex }).hazards
+    ? 'Drag to move · catch the orange, dodge the red'
+    : 'Drag to move · catch what drops'
 }
 
 /** What the session remembers, for the lines that mention it. */
@@ -250,16 +307,23 @@ function overlayFor(hud: Hud, mem: Memory): { title: string; sub: string; action
           action: 'Serve',
         }
       }
-      return hud.lives === LIVES
-        ? { title: 'Brick breaker', sub: 'Drag to aim, tap to serve', action: 'Serve' }
-        : { title: 'Ball down', sub: `${hud.lives} ${hud.lives === 1 ? 'life' : 'lives'} left`, action: 'Serve' }
+      // Lives can't tell these apart — an extra life means a run can be back
+      // down to three having lost one — so the run says which it is.
+      return hud.dropped
+        ? { title: 'Ball down', sub: `${hud.lives} ${hud.lives === 1 ? 'life' : 'lives'} left`, action: 'Serve' }
+        : { title: 'Brick breaker', sub: 'Drag to aim, tap to serve', action: 'Serve' }
     case 'level-clear':
-      return { title: 'Level clear', sub: `${hud.score} points — next one's faster`, action: 'Next level' }
+      return { title: 'Level clear', sub: nextUp(hud.levelIndex + 1, hud.score), action: 'Next level' }
     case 'over':
       return { title: 'Game over', sub: `${hud.score} points${beat}`, action: 'Again' }
     case 'complete':
-      return { title: 'All levels clear', sub: `${hud.score} points. Go and lift something.`, action: 'Again' }
+      return { title: 'All ten clear', sub: `${hud.score} points. Go and lift something.`, action: 'Again' }
   }
+}
+
+/** Name the level you're walking into — by the sixth one that's a warning. */
+function nextUp(levelIndex: number, score: number): string {
+  return `${score} points — next up, ${levelOf({ levelIndex }).name.toLowerCase()}`
 }
 
 interface Colors {
@@ -272,6 +336,12 @@ interface Colors {
   brick2: string
   brick2Line: string
   brick3: string
+  brick4: string
+  steel: string
+  steelLine: string
+  good: string
+  bad: string
+  ink: string
 }
 
 /** Borrow the app's own palette rather than inventing a game one. */
@@ -287,9 +357,18 @@ function themeColors(el: HTMLElement): Colors {
     brick1Line: v('--line-strong', 'rgba(255,246,240,0.24)'),
     brick2: v('--ember-soft', 'rgba(255,107,56,0.1)'),
     brick2Line: v('--ember-line', 'rgba(255,107,56,0.34)'),
-    brick3: v('--ember', '#ff6b38'),
+    brick3: v('--ember-deep', '#c9410f'),
+    brick4: v('--ember', '#ff6b38'),
+    steel: v('--text-faint', '#6e6660'),
+    steelLine: v('--surface-2', '#1a1817'),
+    good: v('--ember-hi', '#ff9166'),
+    bad: v('--bad', '#ef4f52'),
+    ink: v('--ember-ink', '#180701'),
   }
 }
+
+/** Capsule and paddle-nub lettering. One face, small, and never re-measured. */
+const GLYPH_FONT = '700 7px Archivo, -apple-system, system-ui, sans-serif'
 
 function draw(ctx: CanvasRenderingContext2D, s: BreakerState, c: Colors): void {
   ctx.fillStyle = c.bg
@@ -306,11 +385,25 @@ function draw(ctx: CanvasRenderingContext2D, s: BreakerState, c: Colors): void {
   ctx.stroke()
 
   for (const b of s.bricks) {
-    const solid = b.hp >= 3
-    ctx.fillStyle = b.hp >= 3 ? c.brick3 : b.hp === 2 ? c.brick2 : c.brick1
+    // Steel reads as metal: grey, and with a seam down it so it never gets
+    // mistaken for a brick that's nearly gone.
+    if (b.solid) {
+      ctx.fillStyle = c.steel
+      rect(ctx, b.x, b.y, b.w, b.h, 2)
+      ctx.fill()
+      ctx.strokeStyle = c.steelLine
+      ctx.lineWidth = 1.5
+      ctx.beginPath()
+      ctx.moveTo(b.x + 3, b.y + b.h / 2)
+      ctx.lineTo(b.x + b.w - 3, b.y + b.h / 2)
+      ctx.stroke()
+      continue
+    }
+    const outlined = b.hp <= 2
+    ctx.fillStyle = b.hp >= 4 ? c.brick4 : b.hp === 3 ? c.brick3 : b.hp === 2 ? c.brick2 : c.brick1
     rect(ctx, b.x, b.y, b.w, b.h, 2)
     ctx.fill()
-    if (!solid) {
+    if (outlined) {
       ctx.strokeStyle = b.hp === 2 ? c.brick2Line : c.brick1Line
       ctx.lineWidth = 1
       rect(ctx, b.x + 0.5, b.y + 0.5, b.w - 1, b.h - 1, 2)
@@ -318,14 +411,40 @@ function draw(ctx: CanvasRenderingContext2D, s: BreakerState, c: Colors): void {
     }
   }
 
+  // Bolts first, so a capsule falling past one is drawn over it.
+  ctx.fillStyle = c.good
+  for (const bolt of s.bolts) ctx.fillRect(bolt.x - BOLT_W / 2, bolt.y, BOLT_W, BOLT_H)
+
+  ctx.font = GLYPH_FONT
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  for (const d of s.drops) {
+    const a = ABILITIES[d.kind]
+    ctx.fillStyle = a.good ? c.good : c.bad
+    rect(ctx, d.x - DROP_W / 2, d.y - DROP_H / 2, DROP_W, DROP_H, DROP_H / 2)
+    ctx.fill()
+    ctx.fillStyle = a.good ? c.ink : c.bg
+    ctx.fillText(a.glyph, d.x, d.y + 0.5)
+  }
+
   ctx.fillStyle = c.paddle
   rect(ctx, s.paddle.x - s.paddle.w / 2, PADDLE_Y, s.paddle.w, PADDLE_H, PADDLE_H / 2)
   ctx.fill()
+  // Armed: two muzzles on the ends, so the paddle looks like what it now does.
+  if (s.effects.laser) {
+    const off = Math.min(s.paddle.w / 2 - 2, 14)
+    ctx.fillStyle = c.good
+    for (const x of [s.paddle.x - off, s.paddle.x + off]) {
+      ctx.fillRect(x - BOLT_W / 2, PADDLE_Y - 3, BOLT_W, 3)
+    }
+  }
 
   ctx.fillStyle = c.ball
-  ctx.beginPath()
-  ctx.arc(s.ball.x, s.ball.y, BALL_R, 0, Math.PI * 2)
-  ctx.fill()
+  for (const b of s.balls) {
+    ctx.beginPath()
+    ctx.arc(b.x, b.y, BALL_R, 0, Math.PI * 2)
+    ctx.fill()
+  }
 }
 
 function rect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
