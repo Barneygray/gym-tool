@@ -33,7 +33,7 @@ export interface SuggestOptions {
 }
 
 /**
- * Double progression: work up the rep range at a fixed weight; when every set
+ * Double progression: work up the rep range at a fixed weight; once a set
  * reaches the top of the range, add weight and rebuild from the bottom.
  *
  * Three things bend that baseline:
@@ -106,22 +106,44 @@ export function suggestFor(
     }
   }
 
-  // Every logged set at the top weight has to top the rep range. The bar is the
-  // set count actually worked that day (min 2), not a fixed 3 — otherwise a
-  // deload week's two hard sets could never earn a jump.
-  const requiredTop = Math.max(MIN_SETS, Math.min(WORKING_SETS, last.sets.length))
-  const allAtTop = topSets.length >= requiredTop && topSets.every((s) => s.reps >= hi)
+  // One set at the top of the range is the trigger. It used to take every
+  // working set at the top weight, which meant 8/8/7 earned nothing and the
+  // same weight came back next week — and the rep you were one short of is
+  // exactly the one accumulated fatigue takes first, so a lift could sit there
+  // for a month having already proved it could do the work. Reaching the top
+  // once is the honest signal that the weight is ready to move; the caution
+  // lives in the *size* of the jump instead, which is where it belongs.
+  const topped = topSets.filter((s) => s.reps >= hi)
+  // A clean session: every set at the top weight got there, across a full day's
+  // work (min 2 sets, so a deload week's two hard sets still count as full).
+  const fullSession = Math.max(MIN_SETS, Math.min(WORKING_SETS, last.sets.length))
+  const clean = topped.length === topSets.length && topped.length >= fullSession
 
-  if (allAtTop) {
+  if (topped.length > 0) {
     const read = recentRpe(perfs)
-    const jump = exercise.increment * rpeMultiplier(read)
+    // The RPE ramp's double increment is calibrated on a session where every
+    // set topped the range; paying it out for one set in three would prescribe
+    // a weight nothing has actually been lifted for. So a partial top is capped
+    // at the plain single increment — while the ramp's *downside* still applies,
+    // because a grind is a grind however many sets reached the top.
+    const scale = rpeMultiplier(read)
+    const jump = exercise.increment * (clean ? scale : Math.min(1, scale))
     const next = loadableRound(exercise, (topWeight + jump) * intensity, settings)
-    return {
-      weight: next,
-      targetReps: lo,
-      sets,
-      reason: describeJump(read, topWeight, next, hi) + readyNote,
-      kind: 'increase',
+    // A jump that rounds away to nothing is not a level-up, and a card headed
+    // "Level up" showing last week's number reads as a bug rather than as
+    // caution. It happens when a grinding read shrinks the jump below the
+    // smallest pair of plates in the room; the honest answer is to hold the
+    // weight and own the range again, so that case falls through to the build
+    // branch below. A day deliberately backed off — a deload, a rough readiness
+    // rating — is exempt: there the lower number is the whole point.
+    if (intensity !== 1 || next > topWeight) {
+      return {
+        weight: next,
+        targetReps: lo,
+        sets,
+        reason: describeJump(read, topWeight, next, hi, clean, topped.length, topSets.length) + readyNote,
+        kind: 'increase',
+      }
     }
   }
 
@@ -130,11 +152,19 @@ export function suggestFor(
   // Hold the exact weight when nothing is backing it off — re-rounding a
   // perfectly good working weight would silently move it.
   const held = intensity === 1 ? topWeight : loadableRound(exercise, topWeight * intensity, settings)
+  const reason = topped.length > 0
+    // The range was topped and the weight still isn't moving, which needs saying
+    // out loud: the jump it earned is finer than anything this gym can load.
+    ? `Topped the range at ${fmt(topWeight)} kg, but the jump that earns is smaller than your smallest plates. Own ${fmt(held)} kg again first.`
+    // Naming the shortcut is worth a clause: the target is a rep more than the
+    // weakest set, but the *weight* moves the moment any single set reaches the
+    // top, which is a different and much closer thing to aim at.
+    : `Last time: ${topSets.map((s) => s.reps).join('/')} reps at ${fmt(topWeight)} kg. Beat it — aim for ${target}+ on every set.${target < hi ? ` One set at ${hi} moves the weight up.` : ''}`
   return {
     weight: held,
     targetReps: target,
     sets,
-    reason: `Last time: ${topSets.map((s) => s.reps).join('/')} reps at ${fmt(topWeight)} kg. Beat it — aim for ${target}+ on every set.${readyNote}`,
+    reason: reason + readyNote,
     kind: 'build',
   }
 }
@@ -239,21 +269,36 @@ export function rpeMultiplier(read: RpeRead | null): number {
 /** Below this the jump is visibly held back, so the reason owns up to why. */
 const RPE_LOW_CONFIDENCE = 0.5
 
-function describeJump(read: RpeRead | null, from: number, to: number, hi: number): string {
-  if (read === null) return `All sets hit ${hi} reps at ${fmt(from)} kg — move up to ${fmt(to)} kg.`
+function describeJump(
+  read: RpeRead | null, from: number, to: number, hi: number,
+  clean: boolean, topped: number, of: number,
+): string {
+  const earned = clean
+    ? `All sets hit ${hi} reps at ${fmt(from)} kg`
+    : `${topped} of ${of} sets hit ${hi} reps at ${fmt(from)} kg`
+  if (read === null) {
+    return clean
+      ? `${earned} — move up to ${fmt(to)} kg.`
+      : `${earned} — one at the top is enough, so move up to ${fmt(to)} kg.`
+  }
   const felt =
     read.avg <= 7 ? 'and it felt easy'
       : read.avg <= 8 ? 'with a rep or two left'
       : read.avg <= 9 ? 'and it was real work'
       : 'but it was a grind'
+  // Confidence only sizes the jump on a clean session — a partial top is capped
+  // at the single increment regardless, so claiming it was "hedged" for a thin
+  // read would be describing arithmetic that didn't happen.
   const hedge =
-    read.confidence >= RPE_LOW_CONFIDENCE ? ''
+    !clean ? ` One set at the top is the trigger, so the jump stays at a single increment.`
+      : read.confidence >= RPE_LOW_CONFIDENCE ? ''
       : read.spread >= 1 ? ` Those tags disagree with each other, so this one's hedged.`
       : ` Only ${read.n} tagged ${read.n === 1 ? 'set' : 'sets'} behind that, so this one's hedged.`
-  return `Topped the range at ${fmt(from)} kg ${felt} (RPE ${read.avg.toFixed(1)} across recent sessions) — go to ${fmt(to)} kg.${hedge}`
+  return `${earned} ${felt} (RPE ${read.avg.toFixed(1)} across recent sessions) — go to ${fmt(to)} kg.${hedge}`
 }
 
-function loadableRound(exercise: Exercise, weight: number, settings: Settings): number {
+/** Round to a weight this exercise can actually be loaded to at this gym. */
+export function loadableRound(exercise: Exercise, weight: number, settings: Settings): number {
   if (exercise.barLoaded) return roundToLoadable(weight, settings.barWeightKg, settings.platesKg)
   const step = Math.min(exercise.increment, 2.5) / 2 >= 1 ? 1 : 0.5
   return roundToStep(weight, step)

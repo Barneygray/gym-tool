@@ -62,14 +62,26 @@ describe('progression (double progression)', () => {
     expect(s.reason).toMatch(/hedged/)
   })
 
-  it('holds the weight and targets one more rep otherwise', () => {
+  it('holds the weight and targets one more rep when nothing reached the top', () => {
     const history = [session('push', 'bench-press', [
-      { weight: 80, reps: 8 }, { weight: 80, reps: 6 }, { weight: 80, reps: 5 },
+      { weight: 80, reps: 7 }, { weight: 80, reps: 6 }, { weight: 80, reps: 5 },
     ])]
     const s = suggestFor(bench, history, DEFAULT_SETTINGS)
     expect(s.kind).toBe('build')
     expect(s.weight).toBe(80)
     expect(s.targetReps).toBe(6)
+  })
+
+  it('bumps weight off a single set at the top of the range', () => {
+    // 8/6/5 used to earn nothing, so the same weight came back next week —
+    // even though the lift had already proved it could do the top of the range.
+    const history = [session('push', 'bench-press', [
+      { weight: 80, reps: 8 }, { weight: 80, reps: 6 }, { weight: 80, reps: 5 },
+    ])]
+    const s = suggestFor(bench, history, DEFAULT_SETTINGS)
+    expect(s.kind).toBe('increase')
+    expect(s.weight).toBe(82.5)
+    expect(s.targetReps).toBe(5)
   })
 
   it('ignores warm-up-weight sets when judging the top weight', () => {

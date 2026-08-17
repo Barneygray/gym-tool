@@ -29,8 +29,19 @@ tells you exactly what to lift next.
   touched, and searching a picker for an excluded lift by name still surfaces
   it, dimmed, for the session you change your mind.
 - **Progressive overload engine (double progression)** — each exercise has a rep
-  range; you add reps at a fixed weight until every set tops the range, then the
-  app bumps the weight and you rebuild. RPE sharpens the jumps and is read across
+  range; you add reps at a fixed weight until a set tops the range, then the
+  app bumps the weight and you rebuild. **One set at the top is the whole
+  trigger.** It used to take every working set, which meant 8/8/7 earned nothing
+  and the same weight came back next week — and the rep you were one short of is
+  exactly the one accumulated fatigue takes first, so a lift could sit at a
+  weight for a month having already proved it could do the work. Reaching the top
+  once is the honest signal; the caution moved to the *size* of the jump, where it
+  belongs. A clean session — every set at the top weight there — still earns the
+  full RPE-scaled jump, while a partial top is capped at a single increment,
+  because a double increment off one set in three would prescribe a weight
+  nothing has actually been lifted for. And the app only calls it a level-up when
+  the weight really moves: a jump too fine for the smallest plates in the room
+  says so instead. RPE sharpens the jumps and is read across
   your last few sessions rather than one, on a smooth ramp with no thresholds to
   straddle: a settled easy top-of-range run earns a double increment, a grind
   earns half of one. How far the jump travels from the plain increment depends on
@@ -41,6 +52,23 @@ tells you exactly what to lift next.
   of the answers**: it logs the set with no reading rather than a number you
   didn't mean, because a required field with no honest way out collects taps, not
   data.
+- **Live targets between sets** — the session's prescription is a plan made before
+  you touched the bar: it reads three sessions of history and cannot know that set
+  one flew, or came apart. Thirty seconds later there's better evidence than any
+  of that history, sitting in the set you just logged — so every logged set
+  re-derives the next one, and the card headline becomes *the next set* with the
+  plan dropping to a footnote. Top of the range with a rep or two left and the
+  weight goes up **now**, mid-session, rebuilding from the bottom of the range;
+  near the limit and it holds the weight and hands a rep back, because a rep of
+  drop-off across sets is normal rather than a failure; reps out of the bottom of
+  the range and the load comes down so the rest land inside it. A set logged "not
+  sure" reads as neither easy nor hard and simply holds. The steppers arrive
+  pre-dialled to whatever it decided, the rest timer carries the number under its
+  clock — the one thing you're actually looking at for the next ninety seconds —
+  and a chip says when the top of the range is already banked, so the remaining
+  sets are work at a weight that has earned the jump rather than a target you're
+  still chasing. Editing or deleting a set re-reads the room too: a mistyped 8
+  corrected to a 5 takes the jump back off the table.
 - **Mesocycle periodization** — opt into a training block (Setup → Progression → Training block)
   and the engine stops living session-to-session: accumulation weeks ramp your
   prescribed set count while the final week auto-schedules a planned deload

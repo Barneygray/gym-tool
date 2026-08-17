@@ -14,12 +14,18 @@ interface RestTimerProps {
   partner?: { label: string; onGo: () => void }
   /** Name of the station the rest came from, once you've moved on from it. */
   fromLabel?: string
+  /**
+   * What the next set should be, e.g. "82.5 kg × 5". The timer is what's on
+   * screen for the whole minute after a set is logged, so it's where a target
+   * that just changed actually gets read.
+   */
+  nextLabel?: string
   /** The workout these rests belong to — the game remembers its run across it. */
   sessionKey: string
 }
 
 export function RestTimer({
-  startedAt, durationSec, soundOn, onDismiss, partner, fromLabel, sessionKey,
+  startedAt, durationSec, soundOn, onDismiss, partner, fromLabel, nextLabel, sessionKey,
 }: RestTimerProps) {
   const [now, setNow] = useState(Date.now())
   const [playing, setPlaying] = useState(false)
@@ -100,7 +106,7 @@ export function RestTimer({
           </svg>
           <div className="rt-body">
             <div className="time num">{done ? 'GO' : `${mm}:${String(ss).padStart(2, '0')}`}</div>
-            <div className="sub">{subLabel(done, partner?.label, fromLabel)}</div>
+            <div className="sub">{subLabel(done, partner?.label, fromLabel, nextLabel)}</div>
           </div>
           <div className="actions">
             {partner && (
@@ -122,10 +128,14 @@ export function RestTimer({
 /**
  * The line under the clock. It answers whichever question is live: what to do
  * next in a superset, what the clock belongs to once you've walked to another
- * station, and otherwise just where the rest is up to.
+ * station, otherwise the target for the set the rest is buying you — and only
+ * failing all three does it fall back to narrating the clock.
  */
-function subLabel(done: boolean, partnerLabel?: string, fromLabel?: string): string {
+function subLabel(
+  done: boolean, partnerLabel?: string, fromLabel?: string, nextLabel?: string,
+): string {
   if (partnerLabel) return `Superset — then ${partnerLabel}`
   if (fromLabel) return `${done ? 'Rested' : 'Resting'} — ${fromLabel}`
+  if (nextLabel) return `Next — ${nextLabel}`
   return done ? 'Rested — next set' : 'Resting'
 }
