@@ -1529,6 +1529,46 @@ input[type='number'] {
   max-width: 36ch;
 }
 
+/* ── Live next-set target ────────────────────────────────
+   Same card, different evidence: once a set is logged the headline is the next
+   set rather than the session plan. The load moving gets the accent, holding
+   stays neutral — most sets hold, and a colour that fires every time says
+   nothing. */
+.suggestion.live.up {
+  border-left-color: var(--ember);
+}
+.suggestion.live.up .kind > span:first-child {
+  color: var(--ember);
+}
+.suggestion.live.down {
+  border-left-color: var(--warn);
+}
+.suggestion.live.down .kind > span:first-child {
+  color: var(--warn);
+}
+.suggestion.live .kind {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  flex-wrap: wrap;
+}
+.suggestion.live .kind .banked {
+  padding: 2px 6px;
+  border: 1px solid var(--green-line);
+  border-radius: var(--r-pill);
+  background: var(--green-soft);
+  color: var(--green);
+  letter-spacing: 0.11em;
+}
+.suggestion.live .live-plan {
+  margin-top: var(--s3);
+  font-size: 11px;
+  font-stretch: var(--w-cond);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
 /* ── Warm-up ─────────────────────────────────────────────── */
 .warmup-list {
   margin-bottom: var(--s5);

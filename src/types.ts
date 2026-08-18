@@ -74,7 +74,7 @@ export interface Exercise extends SyncMeta {
   /** Exercises sharing a variationGroup are interchangeable stimulus variations. */
   variationGroup: string
   repRange: [number, number]
-  /** kg added when the top of the rep range is reached on all sets. */
+  /** kg added once the top of the rep range is reached on any set. */
   increment: number
   restSec: number
   isCompound: boolean

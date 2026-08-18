@@ -7,6 +7,7 @@ import {
 import { dayById } from '../data/days'
 import { swapOptions } from '../engine/rotation'
 import { RPE_SCALE, rpeMeaning, suggestFor } from '../engine/progression'
+import { nextSetTarget } from '../engine/liveSets'
 import { phaseFor } from '../engine/mesocycle'
 import { warmupRamp } from '../engine/warmup'
 import { platesPerSide } from '../engine/plates'
@@ -33,6 +34,11 @@ import type { ActiveWorkout } from '../App'
 
 const KIND_LABEL = {
   increase: 'Level up', build: 'Beat last time', start: 'First time', deload: 'Deload & rebuild',
+} as const
+
+/** What the live target did to the load, in the same register as `KIND_LABEL`. */
+const LIVE_LABEL = {
+  plan: 'as prescribed', up: 'weight up', hold: 'same weight', down: 'weight down',
 } as const
 
 /**
@@ -133,6 +139,14 @@ function ActiveSession({
   )
   const loggedSets = active.logged[exercise.id] ?? []
 
+  // The prescription above is a plan made before the first rep; this is the
+  // next set, re-derived from what's actually on the board. It moves every time
+  // a set is logged, edited or deleted.
+  const live = useMemo(
+    () => nextSetTarget(exercise, suggestion, loggedSets, settings),
+    [exercise, suggestion, loggedSets, settings],
+  )
+
   // Every weight on this screen — target, warm-up ramp, what you type in — is
   // one bell's worth on dumbbell work, which is worth saying rather than
   // leaving to be guessed at from the size of the number.
@@ -157,17 +171,14 @@ function ActiveSession({
   const [showNote, setShowNote] = useState(false)
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
 
-  // Reset the input to continue from the last logged set of this workout,
-  // otherwise from the engine's suggestion.
-  const seedInputs = () => {
-    const prior = active.logged[exercise.id]
-    if (prior && prior.length > 0) {
-      setWeight(prior[prior.length - 1].weight)
-      setReps(prior[prior.length - 1].reps)
-    } else {
-      setWeight(suggestion.weight)
-      setReps(suggestion.targetReps)
-    }
+  // Dial the steppers to whatever the next set should be: the prescription
+  // before the first rep, and the live target after that. Takes the set list
+  // explicitly because the callers that change it — logging, editing, deleting —
+  // hold the new one before React has re-rendered with it.
+  const seedInputs = (sets: SetLog[] = loggedSets) => {
+    const target = nextSetTarget(exercise, suggestion, sets, settings)
+    setWeight(target.weight)
+    setReps(target.reps)
     setRpe(undefined)
     setNote('')
     setShowNote(false)
@@ -210,20 +221,15 @@ function ActiveSession({
     if (editingIndex !== null) {
       const next = loggedSets.map((s, i) => (i === editingIndex ? set : s))
       writeSets(next)
-      setEditingIndex(null)
-      const last = next[next.length - 1]
-      setWeight(last.weight)
-      setReps(last.reps)
-      setRpe(undefined)
-      setNote('')
-      setShowNote(false)
+      // Fixing a set re-reads the room: a corrected 5 that was typed as 8 has to
+      // take the jump back off the table, not leave it standing.
+      seedInputs(next)
       return
     }
 
-    writeSets([...loggedSets, set])
-    setRpe(undefined)
-    setNote('')
-    setShowNote(false)
+    const next = [...loggedSets, set]
+    writeSets(next)
+    seedInputs(next)
     setRest({ startedAt: Date.now(), durationSec: exercise.restSec, exerciseId: exercise.id })
   }
 
@@ -241,8 +247,9 @@ function ActiveSession({
   }
 
   const deleteSet = (i: number) => {
-    writeSets(loggedSets.filter((_, idx) => idx !== i))
-    seedInputs()
+    const next = loggedSets.filter((_, idx) => idx !== i)
+    writeSets(next)
+    seedInputs(next)
   }
 
   const go = (delta: number) => {
@@ -435,23 +442,52 @@ function ActiveSession({
         <div className="readiness-banner">Readiness: {ready.label}</div>
       )}
 
-      <div className={`suggestion ${suggestion.kind}`}>
-        <div className="kind">{KIND_LABEL[suggestion.kind]}</div>
-        <div className="target num">
-          {suggestion.kind === 'start'
-            ? <>{suggestion.sets} × {suggestion.targetReps}
-              <small>find your weight{basisTag && ` · ${basisTag}`}</small></>
-            : <>{formatNum(suggestion.weight)} kg × {suggestion.targetReps}
-              <small>× {suggestion.sets} sets{basisTag && ` · ${basisTag}`}</small></>}
+      {/* Before the first rep the card is the session's prescription. After it,
+          the headline is the *next set*, re-derived from what you've logged —
+          the plan drops to a footnote, because a target built on history from
+          last Tuesday is the weaker evidence once there's a set on the board.
+          Mid-edit it goes back to the plan: a "set 4" headline over a screen
+          that's fixing set 2 is two answers to one question. */}
+      {live.kind === 'plan' || editingIndex !== null ? (
+        <div className={`suggestion ${suggestion.kind}`}>
+          <div className="kind">{KIND_LABEL[suggestion.kind]}</div>
+          <div className="target num">
+            {suggestion.kind === 'start'
+              ? <>{suggestion.sets} × {suggestion.targetReps}
+                <small>find your weight{basisTag && ` · ${basisTag}`}</small></>
+              : <>{formatNum(suggestion.weight)} kg × {suggestion.targetReps}
+                <small>× {suggestion.sets} sets{basisTag && ` · ${basisTag}`}</small></>}
+          </div>
+          <div className="why">{suggestion.reason}</div>
+          {suggestion.offerSwap && untouched && (
+            <button className="btn-small accent" style={{ marginTop: 'var(--s3)' }}
+              onClick={() => setPicking('swap')}>
+              <SwapIcon size={14} /> Swap to a variation
+            </button>
+          )}
         </div>
-        <div className="why">{suggestion.reason}</div>
-        {suggestion.offerSwap && untouched && (
-          <button className="btn-small accent" style={{ marginTop: 'var(--s3)' }}
-            onClick={() => setPicking('swap')}>
-            <SwapIcon size={14} /> Swap to a variation
-          </button>
-        )}
-      </div>
+      ) : (
+        <div className={`suggestion live ${live.kind}`} aria-live="polite">
+          <div className="kind">
+            <span>
+              {live.beyondPlan
+                ? `Set ${live.setNumber} · past the plan`
+                : `Set ${live.setNumber} of ${suggestion.sets}`}
+            </span>
+            {live.banked && <span className="banked">Top of range banked</span>}
+          </div>
+          <div className="target num">
+            {formatNum(live.weight)} kg × {live.reps}
+            <small>{LIVE_LABEL[live.kind]}{basisTag && ` · ${basisTag}`}</small>
+          </div>
+          <div className="why">{live.reason}</div>
+          <div className="live-plan">
+            {suggestion.kind === 'start'
+              ? `Walked in with: find your weight, ${suggestion.sets} × ${suggestion.targetReps}`
+              : `Walked in with: ${formatNum(suggestion.weight)} kg × ${suggestion.targetReps} × ${suggestion.sets} — ${KIND_LABEL[suggestion.kind].toLowerCase()}`}
+          </div>
+        </div>
+      )}
 
       <ExerciseHistory exerciseId={exercise.id} history={history} />
 
@@ -540,7 +576,7 @@ function ActiveSession({
         {editingIndex !== null ? `Update set ${editingIndex + 1}` : `Log set ${loggedSets.length + 1}`}
       </button>
       {editingIndex !== null && (
-        <button className="btn-ghost mt-3" onClick={seedInputs}>
+        <button className="btn-ghost mt-3" onClick={() => seedInputs()}>
           Cancel edit
         </button>
       )}
@@ -596,6 +632,11 @@ function ActiveSession({
             ? { label: getExercise(partnerId).name, onGo: () => { setRest(null); goToId(partnerId) } }
             : undefined}
           fromLabel={rest.exerciseId === exercise.id ? undefined : getExercise(rest.exerciseId).name}
+          // The target that just moved, on the thing you're actually looking at
+          // for the next ninety seconds.
+          nextLabel={rest.exerciseId === exercise.id && live.weight > 0
+            ? `${formatNum(live.weight)} kg × ${live.reps}`
+            : undefined}
           // Start time, not the session uuid: a workout only gets a uuid once
           // it's been saved, and the brick breaker run has to survive that
           // moment without the session changing identity underneath it.
