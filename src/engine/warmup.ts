@@ -22,8 +22,11 @@ export function warmupRamp(
   if (!exercise.isCompound || workingWeight <= 0) return []
   const bar = settings.barWeightKg
 
+  // Warm-up rungs have to be settable too, on the same grid the working weight
+  // came off — a ramp to a weight the machine has no pin for is a ramp you have
+  // to round in your head, mid-set.
   const round = (w: number) =>
-    exercise.barLoaded ? roundToLoadable(w, bar, settings.platesKg) : Math.max(roundToStep(w, 2), 0)
+    exercise.barLoaded ? roundToLoadable(w, bar, settings.platesKg) : roundToStep(w, exercise.increment)
 
   if (exercise.barLoaded) {
     if (workingWeight <= bar * 1.5) {

@@ -155,7 +155,7 @@ export function suggestFor(
   const reason = topped.length > 0
     // The range was topped and the weight still isn't moving, which needs saying
     // out loud: the jump it earned is finer than anything this gym can load.
-    ? `Topped the range at ${fmt(topWeight)} kg, but the jump that earns is smaller than your smallest plates. Own ${fmt(held)} kg again first.`
+    ? `Topped the range at ${fmt(topWeight)} kg, but the jump that earns is smaller than ${finestStep(exercise)}. Own ${fmt(held)} kg again first.`
     // Naming the shortcut is worth a clause: the target is a rep more than the
     // weakest set, but the *weight* moves the moment any single set reaches the
     // top, which is a different and much closer thing to aim at.
@@ -167,6 +167,13 @@ export function suggestFor(
     reason: reason + readyNote,
     kind: 'build',
   }
+}
+
+/** The smallest real change this lift can make, named the way the gym would. */
+function finestStep(exercise: Exercise): string {
+  return exercise.barLoaded
+    ? 'your smallest plates'
+    : `the ${fmt(exercise.increment)} kg step this lift moves in`
 }
 
 function clampSets(sets: number): number {
@@ -297,11 +304,19 @@ function describeJump(
   return `${earned} ${felt} (RPE ${read.avg.toFixed(1)} across recent sessions) — go to ${fmt(to)} kg.${hedge}`
 }
 
-/** Round to a weight this exercise can actually be loaded to at this gym. */
+/**
+ * Round to a weight this exercise can actually be loaded to at this gym.
+ *
+ * Off the bar, the exercise's own increment *is* the equipment's grid — it's the
+ * smallest change a rack of dumbbells or a stack of pins can make — so that's
+ * what suggestions snap to. It used to snap to a half-kilo instead, on the
+ * theory that a finer grid is a safer one; it isn't. On a lift that moves in
+ * 1 kg steps, a hedged jump landed on 18.5 kg, which is not a dumbbell, and from
+ * there every future suggestion sat half a kilo off every weight in the room.
+ */
 export function loadableRound(exercise: Exercise, weight: number, settings: Settings): number {
   if (exercise.barLoaded) return roundToLoadable(weight, settings.barWeightKg, settings.platesKg)
-  const step = Math.min(exercise.increment, 2.5) / 2 >= 1 ? 1 : 0.5
-  return roundToStep(weight, step)
+  return roundToStep(weight, exercise.increment)
 }
 
 function fmt(n: number): string {

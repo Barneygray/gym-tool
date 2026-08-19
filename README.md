@@ -41,7 +41,11 @@ tells you exactly what to lift next.
   because a double increment off one set in three would prescribe a weight
   nothing has actually been lifted for. And the app only calls it a level-up when
   the weight really moves: a jump too fine for the smallest plates in the room
-  says so instead. RPE sharpens the jumps and is read across
+  says so instead. **Every suggested weight is one the equipment in front of you
+  can actually be set to** — bar lifts round down to what your plates can build,
+  and everything else rounds down onto that lift's own increment, so a rack of
+  1 kg dumbbells is offered 18, 19, 20 and never the 18.5 that isn't on it.
+  RPE sharpens the jumps and is read across
   your last few sessions rather than one, on a smooth ramp with no thresholds to
   straddle: a settled easy top-of-range run earns a double increment, a grind
   earns half of one. How far the jump travels from the plain increment depends on
