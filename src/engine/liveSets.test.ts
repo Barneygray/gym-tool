@@ -55,23 +55,50 @@ describe('topping the range once', () => {
 
   it('keeps the ramp downside on a partial top', () => {
     // The cap is one-sided: it holds an easy read back to a single increment,
-    // but a grind still earns less than one.
+    // but a grind still earns less than one — where the plates can express it.
+    const fine = { ...settings, platesKg: [0.5, 1.25, 2.5, 5, 10, 20] }
     const grind = suggestFor(bench, [session('bench-press', [
       { weight: 100, reps: 8, rpe: 10 }, { weight: 100, reps: 5, rpe: 10 }, { weight: 100, reps: 5, rpe: 10 },
-    ], NOW - DAY)], { ...settings, platesKg: [1.25, 2.5, 5, 10, 20] })
-    // 100 + 0.75 × 2.5 = 101.875, floored to the loadable 2.5 kg step.
-    expect(grind.weight).toBe(100)
+    ], NOW - DAY)], fine)
+    // 100 + 0.75 × 2.5 = 101.875, floored to the loadable 1 kg step.
+    expect(grind.weight).toBe(101)
   })
 
-  it('does not call it a level-up when the jump rounds away to nothing', () => {
-    // Same grind on a gym whose smallest plates can't express it: claiming an
-    // increase while showing last week's weight would read as a bug.
-    const s = suggestFor(bench, [session('bench-press', [
+  it('never lets the rounding eat the increase', () => {
+    // The whole point of the rule is that topping the range moves the weight.
+    // A grinding read shrinks the jump below what a standard plate set can
+    // express, and rounding *down* used to land it back on last week's number —
+    // topping the range on a hard day earned nothing at all. The floor is one
+    // real step, and the reason says whose decision that was.
+    const grind = suggestFor(bench, [session('bench-press', [
       { weight: 100, reps: 8, rpe: 10 }, { weight: 100, reps: 5, rpe: 10 }, { weight: 100, reps: 5, rpe: 10 },
     ], NOW - DAY)], settings)
-    expect(s.kind).toBe('build')
-    expect(s.weight).toBe(100)
-    expect(s.reason).toMatch(/smaller than your smallest plates/)
+    expect(grind.kind).toBe('increase')
+    expect(grind.weight).toBe(102.5)
+    expect(grind.reason).toMatch(/smallest change your plates can make/)
+  })
+
+  it('moves by what the room can load, even when that is coarse', () => {
+    // A rack stocked in 5s and up cannot add 2.5 kg to a bar. The honest answer
+    // is the jump it *can* make: the alternative isn't a gentler increase, it's
+    // never progressing at this gym at all.
+    const coarse = { ...settings, platesKg: [5, 10, 20] }
+    const s = suggestFor(bench, [session('bench-press', [
+      { weight: 80, reps: 8 }, { weight: 80, reps: 6 }, { weight: 80, reps: 6 },
+    ], NOW - DAY)], coarse)
+    expect(s.kind).toBe('increase')
+    expect(s.weight).toBe(90)
+    expect(s.reason).toMatch(/10 kg is the smallest change/)
+  })
+
+  it('leaves a deliberately lighter day alone', () => {
+    // Backing off is the point of a rough readiness rating, so the floor must
+    // not drag the weight back up over it.
+    const topped = [session('bench-press', [
+      { weight: 100, reps: 8 }, { weight: 100, reps: 8 }, { weight: 100, reps: 8 },
+    ], NOW - DAY)]
+    expect(suggestFor(bench, topped, settings, null, { readiness: 'beat' }).weight)
+      .toBeLessThan(suggestFor(bench, topped, settings).weight)
   })
 
   it('names the shortcut while you are still building', () => {

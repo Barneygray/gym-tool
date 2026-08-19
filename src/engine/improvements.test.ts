@@ -247,14 +247,20 @@ describe('RPE-scaled progression', () => {
   })
 
   it('a grinding top-of-range session earns a smaller jump than an easy one', () => {
+    // Judged at a gym with half-kilo plates, because the comparison is only
+    // visible where the room can express it: on the standard 1.25 kg set the
+    // grind's 1.9 kg and the floor's 2.5 kg are the same rung of the ladder.
+    const fine: Settings = { ...DEFAULT_SETTINGS, platesKg: [0.5, 1.25, 2.5, 5, 10, 20] }
     const hard = [session('push', 'bench-press', [
       { weight: 80, reps: 8, rpe: 10 }, { weight: 80, reps: 8, rpe: 10 }, { weight: 80, reps: 8, rpe: 10 },
     ], NOW - DAY)]
     const easy = [session('push', 'bench-press', [
       { weight: 80, reps: 8, rpe: 6 }, { weight: 80, reps: 8, rpe: 6 }, { weight: 80, reps: 8, rpe: 6 },
     ], NOW - DAY)]
-    expect(suggestFor(bench, hard, DEFAULT_SETTINGS).weight)
-      .toBeLessThan(suggestFor(bench, easy, DEFAULT_SETTINGS).weight)
+    expect(suggestFor(bench, hard, fine).weight)
+      .toBeLessThan(suggestFor(bench, easy, fine).weight)
+    // Smaller, but never nothing: the grind still moves the bar.
+    expect(suggestFor(bench, hard, fine).weight).toBeGreaterThan(80)
   })
 
   it('two hard sets can still top the range when only two were worked', () => {

@@ -39,9 +39,14 @@ tells you exactly what to lift next.
   belongs. A clean session — every set at the top weight there — still earns the
   full RPE-scaled jump, while a partial top is capped at a single increment,
   because a double increment off one set in three would prescribe a weight
-  nothing has actually been lifted for. And the app only calls it a level-up when
-  the weight really moves: a jump too fine for the smallest plates in the room
-  says so instead. RPE sharpens the jumps and is read across
+  nothing has actually been lifted for. What the rounding can never do is eat the
+  increase: a grinding read shrinks the jump below what a standard plate set can
+  express, and rounding down to a loadable weight used to land it back on last
+  week's number — so topping the range on a hard day earned nothing at all. The
+  floor is one real step, the smallest change your plates can make, and the
+  suggestion says when it was the plates deciding rather than the engine. A gym
+  stocked in 5s therefore moves in tens; the alternative there isn't a gentler
+  jump, it's never progressing at all. RPE sharpens the jumps and is read across
   your last few sessions rather than one, on a smooth ramp with no thresholds to
   straddle: a settled easy top-of-range run earns a double increment, a grind
   earns half of one. How far the jump travels from the plain increment depends on
