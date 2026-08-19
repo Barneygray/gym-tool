@@ -2,7 +2,7 @@ import type { Exercise, ReadinessLevel, Session, Settings, Suggestion } from '..
 import type { MesoPhase } from './mesocycle'
 import { performancesOf, type Performance } from './history'
 import { isStalled } from './stall'
-import { roundToLoadable, roundToStep } from './plates'
+import { loadableStep, roundToLoadable, roundToStep } from './plates'
 import { readinessEffect } from './readiness'
 import { isBodyweightLoaded } from '../data/exercises'
 import type { BodyweightAt } from './bodyweight'
@@ -128,22 +128,26 @@ export function suggestFor(
     // because a grind is a grind however many sets reached the top.
     const scale = rpeMultiplier(read)
     const jump = exercise.increment * (clean ? scale : Math.min(1, scale))
-    const next = loadableRound(exercise, (topWeight + jump) * intensity, settings)
-    // A jump that rounds away to nothing is not a level-up, and a card headed
-    // "Level up" showing last week's number reads as a bug rather than as
-    // caution. It happens when a grinding read shrinks the jump below the
-    // smallest pair of plates in the room; the honest answer is to hold the
-    // weight and own the range again, so that case falls through to the build
-    // branch below. A day deliberately backed off — a deload, a rough readiness
-    // rating — is exempt: there the lower number is the whole point.
-    if (intensity !== 1 || next > topWeight) {
-      return {
-        weight: next,
-        targetReps: lo,
-        sets,
-        reason: describeJump(read, topWeight, next, hi, clean, topped.length, topSets.length) + readyNote,
-        kind: 'increase',
-      }
+    const rounded = loadableRound(exercise, (topWeight + jump) * intensity, settings)
+    // The rounding must never eat the increase. A grinding read shrinks the jump
+    // below half an increment, and rounding *down* to what the room can load
+    // then lands it back on the weight you just lifted — so topping the range on
+    // a hard day earned nothing at all, which is exactly the stall this rule
+    // exists to end. Where the load isn't deliberately backed off, the floor is
+    // one real step: the smallest change these plates can express. RPE still
+    // sizes everything above that floor.
+    const next = intensity === 1 ? Math.max(rounded, stepUp(exercise, topWeight, settings)) : rounded
+    // True when the floor did the work — the jump the maths asked for was finer
+    // than the room can load, so the reason should own up to it rather than
+    // present a plate-sized jump as the considered answer.
+    const floored = intensity === 1 && next > rounded
+    return {
+      weight: next,
+      targetReps: lo,
+      sets,
+      reason:
+        describeJump(read, topWeight, next, hi, clean, topped.length, topSets.length, floored) + readyNote,
+      kind: 'increase',
     }
   }
 
@@ -152,19 +156,15 @@ export function suggestFor(
   // Hold the exact weight when nothing is backing it off — re-rounding a
   // perfectly good working weight would silently move it.
   const held = intensity === 1 ? topWeight : loadableRound(exercise, topWeight * intensity, settings)
-  const reason = topped.length > 0
-    // The range was topped and the weight still isn't moving, which needs saying
-    // out loud: the jump it earned is finer than anything this gym can load.
-    ? `Topped the range at ${fmt(topWeight)} kg, but the jump that earns is smaller than your smallest plates. Own ${fmt(held)} kg again first.`
-    // Naming the shortcut is worth a clause: the target is a rep more than the
-    // weakest set, but the *weight* moves the moment any single set reaches the
-    // top, which is a different and much closer thing to aim at.
-    : `Last time: ${topSets.map((s) => s.reps).join('/')} reps at ${fmt(topWeight)} kg. Beat it — aim for ${target}+ on every set.${target < hi ? ` One set at ${hi} moves the weight up.` : ''}`
+  // Naming the shortcut is worth a clause: the target is a rep more than the
+  // weakest set, but the *weight* moves the moment any single set reaches the
+  // top, which is a different and much closer thing to aim at.
+  const shortcut = target < hi ? ` One set at ${hi} moves the weight up.` : ''
   return {
     weight: held,
     targetReps: target,
     sets,
-    reason: reason + readyNote,
+    reason: `Last time: ${topSets.map((s) => s.reps).join('/')} reps at ${fmt(topWeight)} kg. Beat it — aim for ${target}+ on every set.${shortcut}${readyNote}`,
     kind: 'build',
   }
 }
@@ -269,17 +269,32 @@ export function rpeMultiplier(read: RpeRead | null): number {
 /** Below this the jump is visibly held back, so the reason owns up to why. */
 const RPE_LOW_CONFIDENCE = 0.5
 
+/**
+ * The next weight above `from` that this exercise can actually be loaded to —
+ * the smallest honest increase there is. On a bar that's a pair of the smallest
+ * plates in the room, which is why a gym stocked only in 5s moves in tens: the
+ * alternative there isn't a gentler jump, it's never progressing at all.
+ */
+function stepUp(exercise: Exercise, from: number, settings: Settings): number {
+  return loadableRound(exercise, from + loadableGrain(exercise, settings), settings)
+}
+
 function describeJump(
   read: RpeRead | null, from: number, to: number, hi: number,
-  clean: boolean, topped: number, of: number,
+  clean: boolean, topped: number, of: number, floored: boolean,
 ): string {
   const earned = clean
     ? `All sets hit ${hi} reps at ${fmt(from)} kg`
     : `${topped} of ${of} sets hit ${hi} reps at ${fmt(from)} kg`
+  // The floor is the *plates* talking, not the engine, and saying so stops a
+  // forced jump after a grinding session reading as the app not listening.
+  const grain = floored
+    ? ` ${fmt(to - from)} kg is the smallest change your plates can make, so that's the jump.`
+    : ''
   if (read === null) {
     return clean
-      ? `${earned} — move up to ${fmt(to)} kg.`
-      : `${earned} — one at the top is enough, so move up to ${fmt(to)} kg.`
+      ? `${earned} — move up to ${fmt(to)} kg.${grain}`
+      : `${earned} — one at the top is enough, so move up to ${fmt(to)} kg.${grain}`
   }
   const felt =
     read.avg <= 7 ? 'and it felt easy'
@@ -290,18 +305,29 @@ function describeJump(
   // at the single increment regardless, so claiming it was "hedged" for a thin
   // read would be describing arithmetic that didn't happen.
   const hedge =
-    !clean ? ` One set at the top is the trigger, so the jump stays at a single increment.`
+    floored ? ''
+      : !clean ? ` One set at the top is the trigger, so the jump stays at a single increment.`
       : read.confidence >= RPE_LOW_CONFIDENCE ? ''
       : read.spread >= 1 ? ` Those tags disagree with each other, so this one's hedged.`
       : ` Only ${read.n} tagged ${read.n === 1 ? 'set' : 'sets'} behind that, so this one's hedged.`
-  return `${earned} ${felt} (RPE ${read.avg.toFixed(1)} across recent sessions) — go to ${fmt(to)} kg.${hedge}`
+  return `${earned} ${felt} (RPE ${read.avg.toFixed(1)} across recent sessions) — go to ${fmt(to)} kg.${hedge}${grain}`
+}
+
+/**
+ * The smallest weight change this exercise can express at this gym: a pair of
+ * the smallest plates on a bar, and the dial or bell spacing everywhere else.
+ * It's the grid every suggested weight lands on, and the floor under any real
+ * increase.
+ */
+export function loadableGrain(exercise: Exercise, settings: Settings): number {
+  if (exercise.barLoaded) return loadableStep(settings.platesKg) || exercise.increment
+  return Math.min(exercise.increment, 2.5) / 2 >= 1 ? 1 : 0.5
 }
 
 /** Round to a weight this exercise can actually be loaded to at this gym. */
 export function loadableRound(exercise: Exercise, weight: number, settings: Settings): number {
   if (exercise.barLoaded) return roundToLoadable(weight, settings.barWeightKg, settings.platesKg)
-  const step = Math.min(exercise.increment, 2.5) / 2 >= 1 ? 1 : 0.5
-  return roundToStep(weight, step)
+  return roundToStep(weight, loadableGrain(exercise, settings))
 }
 
 function fmt(n: number): string {
